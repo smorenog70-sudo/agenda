@@ -66,4 +66,13 @@ export const SCHEMA: CollectionDef[] = [
     ],
     indexes: [],
   },
+  {
+    id: "settings",
+    name: "settings",
+    attributes: [
+      // Un solo documento (id "config") con toda la configuración en JSON.
+      { name: "data", type: "string", size: 1000000, required: false },
+    ],
+    indexes: [],
+  },
 ];

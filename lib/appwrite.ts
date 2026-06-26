@@ -33,6 +33,7 @@ export const COL = {
   accounts: "accounts",
   calendars: "calendars",
   bookings: "bookings",
+  settings: "settings",
 } as const;
 
 // Quita claves undefined/null para no chocar con los atributos de Appwrite.

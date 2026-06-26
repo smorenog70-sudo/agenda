@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DateTime, Interval } from "luxon";
-import { getMeetingType, TIMEZONE, OWNER_NAME } from "@/config";
 import { getAllBusy, createEvent } from "@/lib/google";
 import { createDoc, COL } from "@/lib/appwrite";
+import { getSettings, findMeetingType } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +22,9 @@ export async function POST(req: NextRequest) {
   }
 
   const { slug, startISO, duration, name, email, notes } = body;
-  const mt = slug ? getMeetingType(slug) : undefined;
-  if (!mt) {
+  const settings = await getSettings();
+  const mt = slug ? findMeetingType(settings, slug) : undefined;
+  if (!mt || mt.enabled === false) {
     return NextResponse.json({ error: "Tipo de cita no encontrado." }, { status: 404 });
   }
   if (!startISO || !name || !email) {
@@ -67,11 +68,11 @@ export async function POST(req: NextRequest) {
       accountEmail: mt.accountEmail,
       summary: `${mt.name}: ${name}`,
       description:
-        `Cita agendada desde la página de ${OWNER_NAME}.` +
+        `Cita agendada desde la página de ${settings.ownerName}.` +
         (notes ? `\n\nNotas del invitado:\n${notes}` : ""),
       startISO: start.toUTC().toISO()!,
       endISO: end.toUTC().toISO()!,
-      timezone: TIMEZONE,
+      timezone: settings.timezone,
       attendeeEmail: email,
       attendeeName: name,
       location: mt.location,

@@ -1,13 +1,18 @@
 import { notFound } from "next/navigation";
-import { getMeetingType, OWNER_NAME, TIMEZONE } from "@/config";
+import { getSettings, findMeetingType } from "@/lib/settings";
 import BookingClient from "./BookingClient";
 
 export const dynamic = "force-dynamic";
 
-export default function Page({ params }: { params: { slug: string } }) {
-  const mt = getMeetingType(params.slug);
-  if (!mt) notFound();
+export default async function Page({ params }: { params: { slug: string } }) {
+  const settings = await getSettings();
+  const mt = findMeetingType(settings, params.slug);
+  if (!mt || mt.enabled === false) notFound();
   return (
-    <BookingClient mt={mt} ownerName={OWNER_NAME} ownerTimezone={TIMEZONE} />
+    <BookingClient
+      mt={mt}
+      ownerName={settings.ownerName}
+      ownerTimezone={settings.timezone}
+    />
   );
 }

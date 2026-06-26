@@ -3,7 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 // Protege la página de administración (conectar cuentas) y sus APIs.
 // El callback de OAuth NO se protege aquí: se valida con el parámetro `state`.
 export const config = {
-  matcher: ["/connect", "/setup", "/api/auth/google", "/api/accounts", "/api/setup"],
+  matcher: [
+    "/connect",
+    "/setup",
+    "/admin",
+    "/api/auth/google",
+    "/api/accounts",
+    "/api/setup",
+    "/api/admin",
+  ],
 };
 
 export function middleware(req: NextRequest) {
@@ -14,7 +22,7 @@ export function middleware(req: NextRequest) {
   if (authed) return NextResponse.next();
 
   const path = req.nextUrl.pathname;
-  if (path === "/connect" || path === "/setup") {
+  if (path === "/connect" || path === "/setup" || path === "/admin") {
     return NextResponse.redirect(new URL(`/login?next=${path}`, req.url));
   }
   return NextResponse.json({ error: "No autorizado." }, { status: 401 });

@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { meetingTypes } from "@/config";
 import { Query } from "node-appwrite";
 import { getDb, getDatabaseId, COL } from "@/lib/appwrite";
+import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +35,8 @@ export default async function ConnectPage({
   searchParams: { connected?: string; error?: string };
 }) {
   const { emails, error } = await getConnectedEmails();
+  const settings = await getSettings();
+  const meetingTypes = settings.meetingTypes;
   const connected = new Set(emails.map((e) => e.toLowerCase()));
 
   // Correos únicos requeridos por tus tipos de cita.
@@ -136,9 +138,15 @@ export default async function ConnectPage({
         Repite para cada una.
       </p>
 
-      <div className="mt-8 text-center">
-        <Link href="/" className="text-sm text-slate-500 underline">
-          Ver la página pública
+      <div className="mt-8 flex justify-center gap-4 text-center text-sm">
+        <Link href="/admin" className="text-slate-500 underline">
+          Configuración
+        </Link>
+        <Link href="/setup" className="text-slate-500 underline">
+          Base de datos
+        </Link>
+        <Link href="/" className="text-slate-500 underline">
+          Ver agenda
         </Link>
       </div>
     </main>

@@ -19,6 +19,7 @@ export type MeetingType = {
   locationDetail?: string; // para "phone" o "custom" (ej. un número o link)
   bufferBeforeMinutes?: number; // colchón antes de cada cita (opcional)
   bufferAfterMinutes?: number; // colchón después de cada cita (opcional)
+  enabled?: boolean; // si es false, no se muestra ni se puede reservar
 };
 
 // Tu nombre (aparece en la página y en la descripción del evento).

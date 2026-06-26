@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { meetingTypes, OWNER_NAME } from "@/config";
+import { getSettings } from "@/lib/settings";
+
+export const dynamic = "force-dynamic";
 
 function durationLabel(durationMinutes: number, options?: number[]): string {
   if (options && options.length > 1) {
@@ -10,7 +12,10 @@ function durationLabel(durationMinutes: number, options?: number[]): string {
   return `${durationMinutes} min`;
 }
 
-export default function Home() {
+export default async function Home() {
+  const settings = await getSettings();
+  const types = settings.meetingTypes.filter((m) => m.enabled !== false);
+
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-5 py-16">
       <header className="mb-10">
@@ -18,7 +23,7 @@ export default function Home() {
           Agenda
         </p>
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-          Reserva un horario con {OWNER_NAME}
+          Reserva un horario con {settings.ownerName}
         </h1>
         <p className="mt-3 text-[15px] leading-relaxed text-slate-500">
           Elige el motivo de la reunión. La disponibilidad ya considera todos
@@ -27,7 +32,7 @@ export default function Home() {
       </header>
 
       <ul className="space-y-3">
-        {meetingTypes.map((m) => (
+        {types.map((m) => (
           <li key={m.slug}>
             <Link
               href={`/book/${m.slug}`}

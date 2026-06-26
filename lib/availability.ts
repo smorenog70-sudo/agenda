@@ -32,6 +32,7 @@ function mergeBusy(busy: BusyInterval[]): Interval[] {
 }
 
 export type Slot = { start: string; end: string }; // ISO en UTC
+export type WorkingDay = { start: string; end: string } | null;
 
 export function computeSlots(opts: {
   fromISO: string;
@@ -41,12 +42,20 @@ export function computeSlots(opts: {
   bufferAfterMinutes?: number;
   busy: BusyInterval[];
   now?: DateTime;
+  // Ajustes (si no se pasan, usa los valores por defecto de config.ts).
+  timezone?: string;
+  workingHours?: WorkingDay[];
+  slotGranularityMinutes?: number;
+  minNoticeMinutes?: number;
 }): Slot[] {
-  const tz = TIMEZONE;
+  const tz = opts.timezone ?? TIMEZONE;
+  const workingHours = opts.workingHours ?? WORKING_HOURS;
+  const granularity = opts.slotGranularityMinutes ?? SLOT_GRANULARITY_MINUTES;
+  const minNotice = opts.minNoticeMinutes ?? MIN_NOTICE_MINUTES;
   const bufBefore = opts.bufferBeforeMinutes ?? 0;
   const bufAfter = opts.bufferAfterMinutes ?? 0;
   const now = (opts.now ?? DateTime.now()).setZone(tz);
-  const earliest = now.plus({ minutes: MIN_NOTICE_MINUTES });
+  const earliest = now.plus({ minutes: minNotice });
   const merged = mergeBusy(opts.busy);
 
   const rangeStart = DateTime.fromISO(opts.fromISO).setZone(tz);
@@ -59,7 +68,7 @@ export function computeSlots(opts: {
   while (day <= rangeEnd) {
     // Luxon: weekday 1=Lun ... 7=Dom. Nuestro arreglo: 0=Dom ... 6=Sáb.
     const idx = day.weekday % 7;
-    const wh = WORKING_HOURS[idx];
+    const wh = workingHours[idx];
     if (wh) {
       const [sh, sm] = wh.start.split(":").map(Number);
       const [eh, em] = wh.end.split(":").map(Number);
@@ -97,7 +106,7 @@ export function computeSlots(opts: {
           });
         }
 
-        cursor = cursor.plus({ minutes: SLOT_GRANULARITY_MINUTES });
+        cursor = cursor.plus({ minutes: granularity });
       }
     }
     day = day.plus({ days: 1 });
