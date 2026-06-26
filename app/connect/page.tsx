@@ -70,10 +70,12 @@ export default async function ConnectPage({
       )}
       {error && (
         <div className="mb-5 rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm text-amber-800">
-          {error} Revisa tus variables de entorno y que hayas creado{" "}
-          <code className="rounded bg-amber-100 px-1 py-0.5 text-xs">
-            las colecciones en Appwrite
-          </code>.
+          {error} Revisa tus variables de entorno, y si aún no creas la base de
+          datos, ve a{" "}
+          <Link href="/setup" className="font-medium underline">
+            /setup
+          </Link>{" "}
+          para crearla automáticamente.
         </div>
       )}
 

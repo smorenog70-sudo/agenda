@@ -59,16 +59,19 @@ terminal en ningún momento.
 
 ### 2. Appwrite
 
-Todo por la consola web. El paso a paso con cada colección, atributo e índice está en
-[`appwrite/SETUP.md`](appwrite/SETUP.md). En corto:
+No necesitas crear la base ni las colecciones a mano: una página de la app (`/setup`) las
+crea solas después de desplegar. Aquí solo consigues las llaves.
 
 1. Crea cuenta y un **proyecto** en <https://cloud.appwrite.io>.
-2. Crea una **Database** y las 3 colecciones (`accounts`, `calendars`, `bookings`) tal
-   como indica `appwrite/SETUP.md`.
-3. Crea una **API key** de servidor (scopes de *Databases*: al menos `documents.read`
-   y `documents.write`).
-4. Copia: `APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID`, `APPWRITE_API_KEY`,
-   `APPWRITE_DATABASE_ID` (los pondrás en Vercel en el paso 4).
+2. Crea una **API key** (Project Settings → **API keys → Create API key**) con **todos
+   los scopes del grupo *Databases*** (la app necesita crear colecciones, atributos e
+   índices). Copia el secreto → `APPWRITE_API_KEY`.
+3. Copia el **Project ID** y el **API Endpoint** (suele ser regional, ej.
+   `https://nyc.cloud.appwrite.io/v1`) → `APPWRITE_PROJECT_ID` y `APPWRITE_ENDPOINT`.
+4. Elige un **Database ID** simple, ej. `main` → `APPWRITE_DATABASE_ID`.
+
+Detalle (y la forma manual, por si la prefieres) en
+[`appwrite/SETUP.md`](appwrite/SETUP.md).
 
 ### 3. Sube el código a GitHub (sin terminal)
 
@@ -97,7 +100,14 @@ Vercel necesita el código en un repo de GitHub. Dos maneras, ninguna usa termin
 4. **Deploy**. Vercel instala y compila en la nube. Al terminar te da tu URL pública
    (algo como `https://agenda-xxxx.vercel.app`).
 
-### 5. Conecta el dominio con Google
+### 5. Crea la base de datos (un clic)
+
+1. Entra a `https://TU-URL.vercel.app/setup` → te pedirá tu `ADMIN_PASSWORD`.
+2. Dale al botón **"Crear / verificar la base de datos"**. La app crea sola en Appwrite
+   las colecciones, atributos e índices. Si dice "pendiente", espera unos segundos y dale
+   otra vez (es seguro repetir).
+
+### 6. Conecta el dominio con Google
 
 1. Copia tu URL real de Vercel.
 2. En **Google Cloud → Credentials → tu OAuth client → Authorized redirect URIs**, agrega:
@@ -105,7 +115,7 @@ Vercel necesita el código en un repo de GitHub. Dos maneras, ninguna usa termin
 3. En **Vercel → Settings → Environment Variables**, corrige `GOOGLE_REDIRECT_URI` a esa
    misma URL. Luego **Deployments → (último) → ⋯ → Redeploy**.
 
-### 6. Pon tus correos y conecta tus cuentas
+### 7. Pon tus correos y conecta tus cuentas
 
 1. Edita `config.ts` con tus 4 correos reales — sin terminal: en GitHub abre `config.ts`,
    clic en el lápiz (**Edit**), cambia los `accountEmail`, **Commit**. Vercel redespliega
