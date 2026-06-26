@@ -6,12 +6,15 @@ export type MeetingType = {
   slug: string; // aparece en la URL: /book/<slug>
   name: string; // título visible
   description: string; // subtítulo en la página de reserva
-  durationMinutes: number; // duración de la cita
+  durationMinutes: number; // duración por defecto de la cita
+  // Si tiene varias opciones, el invitado puede elegir la duración (ej. [30, 45]).
+  durationOptions?: number[];
   // Correo de la cuenta de Google que ORGANIZA la cita.
   // Determina desde qué correo sale la invitación y en qué calendario cae el evento.
   // DEBE coincidir EXACTO con uno de los correos de Google que conectas en /connect.
   accountEmail: string;
   color: string; // color de acento (hex) para el branding de cada contexto
+  image?: string; // logo o foto (en /public), ej. "/logos/heru.png"
   location: "meet" | "phone" | "custom"; // tipo de ubicación de la cita
   locationDetail?: string; // para "phone" o "custom" (ej. un número o link)
   bufferBeforeMinutes?: number; // colchón antes de cada cita (opcional)
@@ -56,8 +59,10 @@ export const meetingTypes: MeetingType[] = [
     name: "Personal",
     description: "Para temas personales.",
     durationMinutes: 30,
+    durationOptions: [30, 45],
     accountEmail: "smorenog70@gmail.com",
     color: "#0EA5E9",
+    image: "/logos/personal.png",
     location: "meet",
   },
   {
@@ -65,8 +70,10 @@ export const meetingTypes: MeetingType[] = [
     name: "Basalto Capital",
     description: "Reuniones de Basalto Capital.",
     durationMinutes: 30,
+    durationOptions: [30, 45],
     accountEmail: "santiago@basaltocapital.co",
     color: "#1E3A8A",
+    image: "/logos/basalto.png",
     location: "meet",
   },
   {
@@ -74,17 +81,21 @@ export const meetingTypes: MeetingType[] = [
     name: "Crezes",
     description: "Reuniones de Crezes.",
     durationMinutes: 30,
+    durationOptions: [30, 45],
     accountEmail: "santiago@crezes.com",
     color: "#059669",
+    image: "/logos/crezes.png",
     location: "meet",
   },
   {
     slug: "heru",
-    name: "Heru",
-    description: "Reuniones de Heru.",
+    name: "heru",
+    description: "Reuniones de heru.",
     durationMinutes: 30,
+    durationOptions: [30, 45],
     accountEmail: "santiago@heru-app.com",
     color: "#0B1F3A",
+    image: "/logos/heru.png",
     location: "meet",
   },
 ];

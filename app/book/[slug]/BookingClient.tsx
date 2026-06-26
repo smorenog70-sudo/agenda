@@ -20,6 +20,15 @@ function detectTimezone(fallback: string): string {
   }
 }
 
+const pad = (n: number) => String(n).padStart(2, "0");
+const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+const monthIndex = (y: number, m: number) => y * 12 + m;
+
+function parseKey(key: string): { y: number; m: number; d: number } {
+  const [y, m, d] = key.split("-").map(Number);
+  return { y, m: m - 1, d };
+}
+
 function dayKey(iso: string, tz: string): string {
   // "YYYY-MM-DD" en la zona elegida (en-CA produce formato ISO).
   return new Intl.DateTimeFormat("en-CA", {
@@ -33,9 +42,9 @@ function dayKey(iso: string, tz: string): string {
 function dayLabel(iso: string, tz: string): string {
   return new Intl.DateTimeFormat("es-MX", {
     timeZone: tz,
-    weekday: "short",
+    weekday: "long",
     day: "numeric",
-    month: "short",
+    month: "long",
   }).format(new Date(iso));
 }
 
@@ -48,6 +57,15 @@ function timeLabel(iso: string, tz: string): string {
   }).format(new Date(iso));
 }
 
+function todayKeyInTz(tz: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 const TZ_OPTIONS = [
   "America/Mexico_City",
   "America/Bogota",
@@ -57,10 +75,15 @@ const TZ_OPTIONS = [
   "UTC",
 ];
 
+const WEEKDAYS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"];
+
 export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
   const accent = mt.color;
+  const durationOptions = mt.durationOptions ?? [mt.durationMinutes];
+  const showDurationPicker = durationOptions.length > 1;
 
   const [tz, setTz] = useState<string>(ownerTimezone);
+  const [duration, setDuration] = useState<number>(mt.durationMinutes);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -76,22 +99,26 @@ export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
   const [confirmed, setConfirmed] = useState<{
     meetLink: string | null;
     start: string;
+    duration: number;
   } | null>(null);
 
   useEffect(() => {
     setTz(detectTimezone(ownerTimezone));
   }, [ownerTimezone]);
 
-  async function loadSlots() {
+  async function loadSlots(forDuration: number) {
     setLoading(true);
     setLoadError(null);
     try {
       const from = new Date().toISOString();
       const res = await fetch(
-        `/api/availability?slug=${encodeURIComponent(mt.slug)}&from=${encodeURIComponent(from)}`
+        `/api/availability?slug=${encodeURIComponent(mt.slug)}&from=${encodeURIComponent(
+          from
+        )}&duration=${forDuration}`
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "No se pudo cargar la disponibilidad.");
+      if (!res.ok)
+        throw new Error(data?.error || "No se pudo cargar la disponibilidad.");
       setSlots(data.slots as Slot[]);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Error al cargar.");
@@ -101,9 +128,9 @@ export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
   }
 
   useEffect(() => {
-    void loadSlots();
+    void loadSlots(duration);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mt.slug]);
+  }, [mt.slug, duration]);
 
   // Agrupa los horarios por día en la zona elegida.
   const byDay = useMemo(() => {
@@ -117,16 +144,35 @@ export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
     return map;
   }, [slots, tz]);
 
-  const days = useMemo(() => Array.from(byDay.keys()).sort(), [byDay]);
+  const availableDays = useMemo(() => Array.from(byDay.keys()).sort(), [byDay]);
+  const availableSet = useMemo(() => new Set(availableDays), [availableDays]);
 
-  // Mantiene un día válido seleccionado cuando cambian los datos.
+  const [viewMonth, setViewMonth] = useState<{ y: number; m: number } | null>(
+    null
+  );
+
+  // Mantiene el mes visible dentro del rango con disponibilidad.
   useEffect(() => {
-    if (days.length === 0) {
+    if (availableDays.length === 0) return;
+    const first = parseKey(availableDays[0]);
+    const last = parseKey(availableDays[availableDays.length - 1]);
+    setViewMonth((cur) => {
+      if (!cur) return { y: first.y, m: first.m };
+      const k = monthIndex(cur.y, cur.m);
+      if (k < monthIndex(first.y, first.m)) return { y: first.y, m: first.m };
+      if (k > monthIndex(last.y, last.m)) return { y: last.y, m: last.m };
+      return cur;
+    });
+  }, [availableDays]);
+
+  // Selecciona automáticamente el primer día disponible.
+  useEffect(() => {
+    if (availableDays.length === 0) {
       setSelectedDay(null);
-    } else if (!selectedDay || !days.includes(selectedDay)) {
-      setSelectedDay(days[0]);
+      return;
     }
-  }, [days, selectedDay]);
+    setSelectedDay((cur) => (cur && availableSet.has(cur) ? cur : availableDays[0]));
+  }, [availableDays, availableSet]);
 
   const daySlots = selectedDay ? byDay.get(selectedDay) ?? [] : [];
 
@@ -145,6 +191,7 @@ export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
         body: JSON.stringify({
           slug: mt.slug,
           startISO: selectedSlot.start,
+          duration,
           name: name.trim(),
           email: email.trim(),
           notes: notes.trim(),
@@ -155,13 +202,17 @@ export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
         if (res.status === 409) {
           setFormError("Ese horario se acaba de ocupar. Elige otro, por favor.");
           setSelectedSlot(null);
-          await loadSlots();
+          await loadSlots(duration);
         } else {
           setFormError(data?.error || "No se pudo agendar.");
         }
         return;
       }
-      setConfirmed({ meetLink: data.meetLink ?? null, start: selectedSlot.start });
+      setConfirmed({
+        meetLink: data.meetLink ?? null,
+        start: selectedSlot.start,
+        duration,
+      });
     } catch {
       setFormError("Hubo un problema de conexión. Intenta de nuevo.");
     } finally {
@@ -176,11 +227,11 @@ export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
     setEmail("");
     setNotes("");
     setFormError(null);
-    void loadSlots();
+    void loadSlots(duration);
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
+    <main className="mx-auto max-w-4xl px-5 py-10">
       <Link
         href="/"
         className="mb-6 inline-flex items-center gap-1.5 text-sm text-slate-500 transition hover:text-slate-800"
@@ -197,6 +248,16 @@ export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
         <div className="grid md:grid-cols-[260px_1fr]">
           {/* Panel de contexto */}
           <aside className="border-b border-slate-100 p-6 md:border-b-0 md:border-r">
+            {mt.image && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={mt.image}
+                alt=""
+                width={48}
+                height={48}
+                className="mb-4 h-12 w-12 rounded-xl object-cover ring-1 ring-slate-200"
+              />
+            )}
             <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
               Con {ownerName}
             </p>
@@ -209,7 +270,7 @@ export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
             <dl className="mt-5 space-y-2 text-sm">
               <div className="flex items-center gap-2 text-slate-600">
                 <Dot color={accent} />
-                {mt.durationMinutes} minutos
+                {duration} minutos
               </div>
               <div className="flex items-center gap-2 text-slate-600">
                 <Dot color={accent} />
@@ -228,6 +289,7 @@ export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
               <Confirmation
                 accent={accent}
                 start={confirmed.start}
+                duration={confirmed.duration}
                 tz={tz}
                 meetLink={confirmed.meetLink}
                 email={email}
@@ -237,6 +299,7 @@ export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
               <FormStep
                 accent={accent}
                 slot={selectedSlot}
+                duration={duration}
                 tz={tz}
                 name={name}
                 email={email}
@@ -257,14 +320,25 @@ export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
                 accent={accent}
                 tz={tz}
                 setTz={setTz}
+                duration={duration}
+                setDuration={setDuration}
+                durationOptions={durationOptions}
+                showDurationPicker={showDurationPicker}
                 loading={loading}
                 loadError={loadError}
-                days={days}
+                viewMonth={viewMonth}
+                setViewMonth={setViewMonth}
+                availableDays={availableDays}
+                availableSet={availableSet}
                 selectedDay={selectedDay}
-                setSelectedDay={setSelectedDay}
+                setSelectedDay={(d) => {
+                  setSelectedDay(d);
+                  setSelectedSlot(null);
+                }}
                 daySlots={daySlots}
+                tzNow={todayKeyInTz(tz)}
                 onPick={(s) => setSelectedSlot(s)}
-                onRetry={loadSlots}
+                onRetry={() => loadSlots(duration)}
               />
             )}
           </section>
@@ -293,12 +367,20 @@ function SelectStep(props: {
   accent: string;
   tz: string;
   setTz: (v: string) => void;
+  duration: number;
+  setDuration: (v: number) => void;
+  durationOptions: number[];
+  showDurationPicker: boolean;
   loading: boolean;
   loadError: string | null;
-  days: string[];
+  viewMonth: { y: number; m: number } | null;
+  setViewMonth: (v: { y: number; m: number }) => void;
+  availableDays: string[];
+  availableSet: Set<string>;
   selectedDay: string | null;
   setSelectedDay: (v: string) => void;
   daySlots: Slot[];
+  tzNow: string;
   onPick: (s: Slot) => void;
   onRetry: () => void;
 }) {
@@ -306,20 +388,64 @@ function SelectStep(props: {
     accent,
     tz,
     setTz,
+    duration,
+    setDuration,
+    durationOptions,
+    showDurationPicker,
     loading,
     loadError,
-    days,
+    viewMonth,
+    setViewMonth,
+    availableDays,
+    availableSet,
     selectedDay,
     setSelectedDay,
     daySlots,
+    tzNow,
     onPick,
     onRetry,
   } = props;
 
+  const bounds = useMemo(() => {
+    if (availableDays.length === 0) return null;
+    const first = parseKey(availableDays[0]);
+    const last = parseKey(availableDays[availableDays.length - 1]);
+    return {
+      min: monthIndex(first.y, first.m),
+      max: monthIndex(last.y, last.m),
+    };
+  }, [availableDays]);
+
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-medium text-slate-900">Elige un horario</h2>
+      {/* Duración + zona horaria */}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        {showDurationPicker ? (
+          <div className="inline-flex rounded-xl border border-slate-200 p-0.5">
+            {durationOptions.map((opt) => {
+              const active = opt === duration;
+              return (
+                <button
+                  key={opt}
+                  onClick={() => setDuration(opt)}
+                  className="rounded-lg px-3 py-1.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                  style={
+                    active
+                      ? { backgroundColor: accent, color: "white" }
+                      : { color: "#475569" }
+                  }
+                >
+                  {opt} min
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <span className="text-sm font-medium text-slate-900">
+            Elige un horario
+          </span>
+        )}
+
         <label className="flex items-center gap-2 text-xs text-slate-500">
           <span className="hidden sm:inline">Zona horaria</span>
           <select
@@ -337,7 +463,7 @@ function SelectStep(props: {
       </div>
 
       {loading ? (
-        <p className="py-10 text-center text-sm text-slate-400">
+        <p className="py-16 text-center text-sm text-slate-400">
           Cargando disponibilidad…
         </p>
       ) : loadError ? (
@@ -347,57 +473,195 @@ function SelectStep(props: {
             Reintentar
           </button>
         </div>
-      ) : days.length === 0 ? (
-        <p className="py-10 text-center text-sm text-slate-400">
+      ) : availableDays.length === 0 || !viewMonth || !bounds ? (
+        <p className="py-16 text-center text-sm text-slate-400">
           No hay horarios disponibles por ahora.
         </p>
       ) : (
-        <>
-          <div className="mb-5 flex flex-wrap gap-2">
-            {days.map((d) => {
-              const active = d === selectedDay;
-              // d viene como YYYY-MM-DD; lo convertimos a una fecha estable a mediodía UTC.
-              const labelIso = `${d}T12:00:00Z`;
-              return (
-                <button
-                  key={d}
-                  onClick={() => setSelectedDay(d)}
-                  className="rounded-xl border px-3 py-2 text-sm capitalize transition focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-                  style={
-                    active
-                      ? { backgroundColor: accent, borderColor: accent, color: "white" }
-                      : { borderColor: "#e2e8f0", color: "#334155" }
-                  }
-                >
-                  {dayLabel(labelIso, tz)}
-                </button>
-              );
-            })}
-          </div>
+        <div className="grid gap-6 sm:grid-cols-[1fr_200px]">
+          <Calendar
+            accent={accent}
+            viewMonth={viewMonth}
+            setViewMonth={setViewMonth}
+            availableSet={availableSet}
+            selectedDay={selectedDay}
+            setSelectedDay={setSelectedDay}
+            tzNow={tzNow}
+            minIndex={bounds.min}
+            maxIndex={bounds.max}
+          />
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {daySlots.map((s) => (
-              <button
-                key={s.start}
-                onClick={() => onPick(s)}
-                className="tabular rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-                style={{ borderColor: "#e2e8f0" }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = accent)}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#e2e8f0")}
-              >
-                {timeLabel(s.start, tz)}
-              </button>
-            ))}
+          <div>
+            <h3 className="mb-3 text-sm font-medium capitalize text-slate-900">
+              {selectedDay
+                ? dayLabel(`${selectedDay}T12:00:00Z`, "UTC")
+                : "Elige un día"}
+            </h3>
+            {selectedDay && daySlots.length > 0 ? (
+              <div className="grid max-h-[19rem] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-1">
+                {daySlots.map((s) => (
+                  <button
+                    key={s.start}
+                    onClick={() => onPick(s)}
+                    className="tabular rounded-xl border px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                    style={{ borderColor: "#e2e8f0" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = accent)}
+                    onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#e2e8f0")}
+                  >
+                    {timeLabel(s.start, tz)}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">
+                Selecciona un día con disponibilidad.
+              </p>
+            )}
           </div>
-        </>
+        </div>
       )}
     </div>
+  );
+}
+
+function Calendar(props: {
+  accent: string;
+  viewMonth: { y: number; m: number };
+  setViewMonth: (v: { y: number; m: number }) => void;
+  availableSet: Set<string>;
+  selectedDay: string | null;
+  setSelectedDay: (v: string) => void;
+  tzNow: string;
+  minIndex: number;
+  maxIndex: number;
+}) {
+  const {
+    accent,
+    viewMonth,
+    setViewMonth,
+    availableSet,
+    selectedDay,
+    setSelectedDay,
+    tzNow,
+    minIndex,
+    maxIndex,
+  } = props;
+
+  const { y, m } = viewMonth;
+  const idx = monthIndex(y, m);
+  const prevDisabled = idx <= minIndex;
+  const nextDisabled = idx >= maxIndex;
+
+  const title = cap(
+    new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric" }).format(
+      new Date(y, m, 1)
+    )
+  );
+
+  // Construye la cuadrícula (semanas que empiezan en lunes).
+  const firstWeekday = (new Date(y, m, 1).getDay() + 6) % 7; // 0 = lunes
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  function go(delta: number) {
+    const ni = idx + delta;
+    if (ni < minIndex || ni > maxIndex) return;
+    setViewMonth({ y: Math.floor(ni / 12), m: ni % 12 });
+  }
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-sm font-semibold text-slate-900">{title}</span>
+        <div className="flex gap-1">
+          <NavBtn dir="prev" disabled={prevDisabled} onClick={() => go(-1)} />
+          <NavBtn dir="next" disabled={nextDisabled} onClick={() => go(1)} />
+        </div>
+      </div>
+
+      <div className="mb-1 grid grid-cols-7 gap-1">
+        {WEEKDAYS.map((w) => (
+          <div
+            key={w}
+            className="py-1 text-center text-[11px] font-medium uppercase tracking-wide text-slate-400"
+          >
+            {w}
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((d, i) => {
+          if (d === null) return <div key={`e${i}`} />;
+          const key = `${y}-${pad(m + 1)}-${pad(d)}`;
+          const available = availableSet.has(key);
+          const selected = key === selectedDay;
+          const isToday = key === tzNow;
+
+          return (
+            <button
+              key={key}
+              disabled={!available}
+              onClick={() => available && setSelectedDay(key)}
+              className="relative flex aspect-square items-center justify-center rounded-lg text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+              style={
+                selected
+                  ? { backgroundColor: accent, color: "white", fontWeight: 600 }
+                  : available
+                  ? {
+                      backgroundColor: `${accent}12`,
+                      color: "#0f172a",
+                      fontWeight: 600,
+                    }
+                  : { color: "#cbd5e1" }
+              }
+            >
+              {d}
+              {isToday && !selected && (
+                <span
+                  aria-hidden
+                  className="absolute bottom-1 h-1 w-1 rounded-full"
+                  style={{ backgroundColor: accent }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function NavBtn({
+  dir,
+  disabled,
+  onClick,
+}: {
+  dir: "prev" | "next";
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={dir === "prev" ? "Mes anterior" : "Mes siguiente"}
+      className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-800 disabled:opacity-30 disabled:hover:border-slate-200 disabled:hover:text-slate-500"
+    >
+      <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        {dir === "prev" ? <path d="M12.5 4.5 7 10l5.5 5.5" /> : <path d="M7.5 4.5 13 10l-5.5 5.5" />}
+      </svg>
+    </button>
   );
 }
 
 function FormStep(props: {
   accent: string;
   slot: Slot;
+  duration: number;
   tz: string;
   name: string;
   email: string;
@@ -413,6 +677,7 @@ function FormStep(props: {
   const {
     accent,
     slot,
+    duration,
     tz,
     name,
     email,
@@ -440,7 +705,7 @@ function FormStep(props: {
 
       <div className="mb-5 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
         <span className="capitalize">{dayLabel(slot.start, tz)}</span> ·{" "}
-        <span className="tabular">{timeLabel(slot.start, tz)}</span>
+        <span className="tabular">{timeLabel(slot.start, tz)}</span> · {duration} min
       </div>
 
       <div className="space-y-3">
@@ -510,12 +775,13 @@ function Field({
 function Confirmation(props: {
   accent: string;
   start: string;
+  duration: number;
   tz: string;
   meetLink: string | null;
   email: string;
   onReset: () => void;
 }) {
-  const { accent, start, tz, meetLink, email, onReset } = props;
+  const { accent, start, duration, tz, meetLink, email, onReset } = props;
   return (
     <div className="py-2">
       <div
@@ -531,7 +797,7 @@ function Confirmation(props: {
       </h2>
       <p className="mt-1.5 text-sm text-slate-600">
         <span className="capitalize">{dayLabel(start, tz)}</span> a las{" "}
-        <span className="tabular">{timeLabel(start, tz)}</span>.
+        <span className="tabular">{timeLabel(start, tz)}</span> · {duration} min.
       </p>
       <p className="mt-3 text-sm text-slate-500">
         Te llegó la invitación a <span className="font-medium">{email}</span>.

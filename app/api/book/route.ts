@@ -10,6 +10,7 @@ export async function POST(req: NextRequest) {
   let body: {
     slug?: string;
     startISO?: string;
+    duration?: number;
     name?: string;
     email?: string;
     notes?: string;
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
   }
 
-  const { slug, startISO, name, email, notes } = body;
+  const { slug, startISO, duration, name, email, notes } = body;
   const mt = slug ? getMeetingType(slug) : undefined;
   if (!mt) {
     return NextResponse.json({ error: "Tipo de cita no encontrado." }, { status: 404 });
@@ -32,11 +33,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Correo inválido." }, { status: 400 });
   }
 
+  // Duración elegida por el invitado (validada contra las opciones permitidas).
+  const allowed = mt.durationOptions ?? [mt.durationMinutes];
+  const durationMinutes =
+    typeof duration === "number" && allowed.includes(duration)
+      ? duration
+      : mt.durationMinutes;
+
   const start = DateTime.fromISO(startISO);
   if (!start.isValid) {
     return NextResponse.json({ error: "Fecha inválida." }, { status: 400 });
   }
-  const end = start.plus({ minutes: mt.durationMinutes });
+  const end = start.plus({ minutes: durationMinutes });
 
   try {
     // Re-checamos contra todos los calendarios para evitar doble reserva.
