@@ -14,7 +14,9 @@ function durationLabel(durationMinutes: number, options?: number[]): string {
 
 export default async function Home() {
   const settings = await getSettings();
-  const types = settings.meetingTypes.filter((m) => m.enabled !== false);
+  const types = settings.meetingTypes.filter(
+    (m) => m.enabled !== false && m.listed !== false
+  );
 
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-5 py-16">

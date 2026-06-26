@@ -74,6 +74,7 @@ function normalizeMeetingType(raw: any): MeetingType | null {
       ? Number(raw.bufferAfterMinutes)
       : undefined,
     enabled: raw.enabled === false ? false : true,
+    listed: raw.listed === false ? false : true,
   };
 }
 

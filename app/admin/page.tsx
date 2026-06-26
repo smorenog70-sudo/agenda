@@ -19,6 +19,7 @@ type MeetingType = {
   bufferBeforeMinutes?: number;
   bufferAfterMinutes?: number;
   enabled?: boolean;
+  listed?: boolean;
 };
 
 type Settings = {
@@ -49,9 +50,14 @@ const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 export default function AdminPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [origin, setOrigin] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -133,6 +139,7 @@ export default function AdminPage() {
         color: "#0EA5E9",
         location: "meet",
         enabled: true,
+        listed: true,
       };
       return { ...s, meetingTypes: [...s.meetingTypes, nuevo] };
     });
@@ -249,6 +256,16 @@ export default function AdminPage() {
         </Grid>
       </Card>
 
+      {/* Enlaces para compartir */}
+      <Card title="Enlaces para compartir">
+        <Field label="Página con todos los motivos">
+          <CopyLink url={origin ? `${origin}/` : ""} />
+        </Field>
+        <p className="mt-2 text-[11px] text-slate-400">
+          El link único de cada motivo está dentro de su tarjeta, más abajo.
+        </p>
+      </Card>
+
       {/* Horario laboral */}
       <Card title="Horario laboral">
         <div className="space-y-2">
@@ -325,6 +342,15 @@ export default function AdminPage() {
                       className="h-4 w-4 rounded border-slate-300"
                     />
                     Activo
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <input
+                      type="checkbox"
+                      checked={m.listed !== false}
+                      onChange={(e) => patchMT(i, { listed: e.target.checked })}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    En la lista
                   </label>
                   <button
                     onClick={() => removeMeetingType(i)}
@@ -446,6 +472,20 @@ export default function AdminPage() {
                   />
                 </Field>
               </div>
+
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <span className="mb-1.5 block text-xs font-medium text-slate-600">
+                  Link único de este motivo
+                </span>
+                <CopyLink url={origin ? `${origin}/book/${m.slug}` : ""} />
+                <span className="mt-1 block text-[11px] text-slate-400">
+                  {m.enabled === false
+                    ? "Está desactivado: el link no funciona hasta que lo actives."
+                    : m.listed === false
+                    ? "Oculto de la página principal, pero este link directo sí funciona."
+                    : "Aparece en la página principal y funciona por link directo."}
+                </span>
+              </div>
             </div>
           ))}
 
@@ -482,6 +522,32 @@ export default function AdminPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+function CopyLink({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex items-center gap-2">
+      <code className="min-w-0 flex-1 truncate rounded-lg bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
+        {url || "…"}
+      </code>
+      <button
+        onClick={async () => {
+          if (!url) return;
+          try {
+            await navigator.clipboard.writeText(url);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          } catch {
+            /* ignore */
+          }
+        }}
+        className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300"
+      >
+        {copied ? "Copiado" : "Copiar"}
+      </button>
+    </div>
   );
 }
 

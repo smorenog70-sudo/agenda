@@ -20,6 +20,8 @@ export type MeetingType = {
   bufferBeforeMinutes?: number; // colchón antes de cada cita (opcional)
   bufferAfterMinutes?: number; // colchón después de cada cita (opcional)
   enabled?: boolean; // si es false, no se muestra ni se puede reservar
+  // si es false, no aparece en la página principal, pero su link directo sí funciona
+  listed?: boolean;
 };
 
 // Tu nombre (aparece en la página y en la descripción del evento).
