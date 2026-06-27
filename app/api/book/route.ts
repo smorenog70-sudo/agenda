@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
     name?: string;
     email?: string;
     notes?: string;
+    subject?: string;
   };
   try {
     body = await req.json();
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
   }
 
-  const { slug, startISO, duration, name, email, notes } = body;
+  const { slug, startISO, duration, name, email, notes, subject } = body;
   const settings = await getSettings();
   const mt = slug ? findMeetingType(settings, slug) : undefined;
   if (!mt || mt.enabled === false) {
@@ -31,9 +32,16 @@ export async function POST(req: NextRequest) {
   if (!startISO || !name || !email) {
     return NextResponse.json({ error: "Faltan datos." }, { status: 400 });
   }
+  if (!subject || !subject.trim()) {
+    return NextResponse.json(
+      { error: "Falta el asunto de la reunión." },
+      { status: 400 }
+    );
+  }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return NextResponse.json({ error: "Correo inválido." }, { status: 400 });
   }
+  const cleanSubject = subject.trim().slice(0, 300);
 
   // Duración elegida por el invitado (validada contra las opciones permitidas).
   const allowed = mt.durationOptions ?? [mt.durationMinutes];
@@ -70,9 +78,10 @@ export async function POST(req: NextRequest) {
 
     const ev = await createEvent({
       accountEmail: mt.accountEmail,
-      summary: `${mt.name}: ${name}`,
+      summary: `${mt.name}: ${name} — ${cleanSubject}`,
       description:
         `Cita agendada desde la página de ${settings.ownerName}.` +
+        `\n\nAsunto: ${cleanSubject}` +
         (notes ? `\n\nNotas del invitado:\n${notes}` : "") +
         `\n\nPara cancelar o reagendar:\n${manageUrl}`,
       startISO: start.toUTC().toISO()!,
@@ -92,6 +101,7 @@ export async function POST(req: NextRequest) {
       end_time: end.toUTC().toISO(),
       google_event_id: ev.id ?? null,
       notes: notes ?? null,
+      subject: cleanSubject,
       status: "active",
       cancel_token: cancelToken,
       account_email: mt.accountEmail,

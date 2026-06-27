@@ -20,6 +20,7 @@ export async function GET() {
       typeName: nameBySlug.get(b.meeting_type) ?? b.meeting_type,
       inviteeName: b.invitee_name,
       inviteeEmail: b.invitee_email,
+      subject: b.subject ?? "",
       start: b.start_time,
       end: b.end_time,
     }));

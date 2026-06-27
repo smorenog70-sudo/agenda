@@ -13,6 +13,7 @@ export default async function Page({ params }: { params: { slug: string } }) {
       mt={mt}
       ownerName={settings.ownerName}
       ownerTimezone={settings.timezone}
+      ownerLinkedin={settings.ownerLinkedin}
     />
   );
 }

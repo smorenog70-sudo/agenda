@@ -31,6 +31,19 @@ export default async function Home() {
           Elige el motivo de la reunión. La disponibilidad ya considera todos
           mis calendarios, así que cualquier horario que veas está libre.
         </p>
+        {settings.ownerLinkedin && (
+          <a
+            href={settings.ownerLinkedin}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-[#0A66C2] transition hover:underline"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
+              <path d="M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0 8h5v16H0V8zm7.5 0H12v2.2h.07c.62-1.18 2.14-2.43 4.41-2.43C21.4 7.77 24 10.06 24 14.6V24h-5v-8.3c0-1.98-.04-4.53-2.76-4.53-2.76 0-3.18 2.16-3.18 4.39V24h-5V8z" />
+            </svg>
+            Ver mi LinkedIn
+          </a>
+        )}
       </header>
 
       <ul className="space-y-3">

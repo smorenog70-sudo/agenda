@@ -24,6 +24,8 @@ type MeetingType = {
 
 type Settings = {
   ownerName: string;
+  ownerLinkedin: string;
+  signupUrl: string;
   timezone: string;
   slotGranularityMinutes: number;
   minNoticeMinutes: number;
@@ -60,6 +62,7 @@ export default function AdminPage() {
     typeName: string;
     inviteeName: string;
     inviteeEmail: string;
+    subject: string;
     start: string;
     end: string;
   };
@@ -307,6 +310,26 @@ export default function AdminPage() {
             />
           </Field>
         </Grid>
+        <div className="mt-3 space-y-3">
+          <Field
+            label="Tu LinkedIn (opcional)"
+            hint="Aparece en la página de reserva para que sepan con quién se van a reunir."
+          >
+            <Input
+              value={settings.ownerLinkedin}
+              onChange={(v) => patch({ ownerLinkedin: v })}
+            />
+          </Field>
+          <Field
+            label="Link a tu landing / crear cuenta (opcional)"
+            hint="Si lo pones, aparece un enlace discreto en todas las pantallas."
+          >
+            <Input
+              value={settings.signupUrl}
+              onChange={(v) => patch({ signupUrl: v })}
+            />
+          </Field>
+        </div>
       </Card>
 
       {/* Próximas citas */}
@@ -329,6 +352,9 @@ export default function AdminPage() {
                     {b.inviteeName}{" "}
                     <span className="font-normal text-slate-400">· {b.typeName}</span>
                   </p>
+                  {b.subject && (
+                    <p className="truncate text-xs text-slate-600">{b.subject}</p>
+                  )}
                   <p className="truncate text-xs text-slate-500">
                     <span className="capitalize">{fmtBooking(b.start)}</span> ·{" "}
                     {b.inviteeEmail}

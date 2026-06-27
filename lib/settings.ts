@@ -1,6 +1,8 @@
 import {
   MeetingType,
   OWNER_NAME,
+  OWNER_LINKEDIN,
+  SIGNUP_URL,
   TIMEZONE,
   SLOT_GRANULARITY_MINUTES,
   MIN_NOTICE_MINUTES,
@@ -14,6 +16,8 @@ export type WorkingDay = { start: string; end: string } | null;
 
 export type Settings = {
   ownerName: string;
+  ownerLinkedin: string;
+  signupUrl: string;
   timezone: string;
   slotGranularityMinutes: number;
   minNoticeMinutes: number;
@@ -27,6 +31,8 @@ const SETTINGS_DOC_ID = "config";
 export function defaultSettings(): Settings {
   return {
     ownerName: OWNER_NAME,
+    ownerLinkedin: OWNER_LINKEDIN,
+    signupUrl: SIGNUP_URL,
     timezone: TIMEZONE,
     slotGranularityMinutes: SLOT_GRANULARITY_MINUTES,
     minNoticeMinutes: MIN_NOTICE_MINUTES,
@@ -105,6 +111,10 @@ export function normalizeSettings(raw: any): Settings {
 
   return {
     ownerName: typeof raw.ownerName === "string" ? raw.ownerName : def.ownerName,
+    ownerLinkedin:
+      typeof raw.ownerLinkedin === "string" ? raw.ownerLinkedin.trim() : def.ownerLinkedin,
+    signupUrl:
+      typeof raw.signupUrl === "string" ? raw.signupUrl.trim() : def.signupUrl,
     timezone: typeof raw.timezone === "string" ? raw.timezone : def.timezone,
     slotGranularityMinutes: num(raw.slotGranularityMinutes, def.slotGranularityMinutes, 1),
     minNoticeMinutes: num(raw.minNoticeMinutes, def.minNoticeMinutes, 0),

@@ -13,6 +13,7 @@ export type BookingDoc = {
   end_time: string;
   google_event_id?: string | null;
   notes?: string | null;
+  subject?: string | null;
   status?: string | null;
   cancel_token?: string | null;
   account_email?: string | null;

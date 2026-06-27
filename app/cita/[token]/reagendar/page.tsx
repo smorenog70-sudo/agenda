@@ -29,6 +29,7 @@ export default async function Page({
       mt={mt}
       ownerName={settings.ownerName}
       ownerTimezone={settings.timezone}
+      ownerLinkedin={settings.ownerLinkedin}
       reschedule={{ token: params.token, durationMinutes: durationMin }}
     />
   );

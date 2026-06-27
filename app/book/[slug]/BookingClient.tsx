@@ -10,6 +10,7 @@ type Props = {
   mt: MeetingType;
   ownerName: string;
   ownerTimezone: string;
+  ownerLinkedin?: string;
   reschedule?: { token: string; durationMinutes: number };
 };
 
@@ -82,6 +83,7 @@ export default function BookingClient({
   mt,
   ownerName,
   ownerTimezone,
+  ownerLinkedin,
   reschedule,
 }: Props) {
   const accent = mt.color;
@@ -104,6 +106,7 @@ export default function BookingClient({
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [subject, setSubject] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -193,6 +196,8 @@ export default function BookingClient({
     if (!name.trim()) return setFormError("Escribe tu nombre.");
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
       return setFormError("Escribe un correo válido.");
+    if (!subject.trim())
+      return setFormError("Escribe el asunto de la reunión.");
 
     setSubmitting(true);
     try {
@@ -205,6 +210,7 @@ export default function BookingClient({
           duration,
           name: name.trim(),
           email: email.trim(),
+          subject: subject.trim(),
           notes: notes.trim(),
         }),
       });
@@ -236,6 +242,7 @@ export default function BookingClient({
     setSelectedSlot(null);
     setName("");
     setEmail("");
+    setSubject("");
     setNotes("");
     setFormError(null);
     void loadSlots(duration);
@@ -309,6 +316,19 @@ export default function BookingClient({
             <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
               Con {ownerName}
             </p>
+            {ownerLinkedin && (
+              <a
+                href={ownerLinkedin}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-[#0A66C2] transition hover:underline"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
+                  <path d="M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0 8h5v16H0V8zm7.5 0H12v2.2h.07c.62-1.18 2.14-2.43 4.41-2.43C21.4 7.77 24 10.06 24 14.6V24h-5v-8.3c0-1.98-.04-4.53-2.76-4.53-2.76 0-3.18 2.16-3.18 4.39V24h-5V8z" />
+                </svg>
+                Ver LinkedIn
+              </a>
+            )}
             <h1 className="mt-1.5 text-xl font-semibold tracking-tight text-slate-900">
               {mt.name}
             </h1>
@@ -367,9 +387,11 @@ export default function BookingClient({
                   tz={tz}
                   name={name}
                   email={email}
+                  subject={subject}
                   notes={notes}
                   setName={setName}
                   setEmail={setEmail}
+                  setSubject={setSubject}
                   setNotes={setNotes}
                   onBack={() => {
                     setSelectedSlot(null);
@@ -730,9 +752,11 @@ function FormStep(props: {
   tz: string;
   name: string;
   email: string;
+  subject: string;
   notes: string;
   setName: (v: string) => void;
   setEmail: (v: string) => void;
+  setSubject: (v: string) => void;
   setNotes: (v: string) => void;
   onBack: () => void;
   onSubmit: () => void;
@@ -746,9 +770,11 @@ function FormStep(props: {
     tz,
     name,
     email,
+    subject,
     notes,
     setName,
     setEmail,
+    setSubject,
     setNotes,
     onBack,
     onSubmit,
@@ -791,13 +817,22 @@ function FormStep(props: {
             placeholder="tu@correo.com"
           />
         </Field>
+        <Field label="Asunto de la reunión">
+          <input
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            maxLength={300}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            placeholder="Ej. Propuesta de alianza comercial"
+          />
+        </Field>
         <Field label="Notas (opcional)">
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
             className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-            placeholder="¿De qué quieres hablar?"
+            placeholder="Algo más que deba saber antes de la reunión"
           />
         </Field>
       </div>

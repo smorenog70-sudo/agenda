@@ -27,6 +27,14 @@ export type MeetingType = {
 // Tu nombre (aparece en la página y en la descripción del evento).
 export const OWNER_NAME = "Santiago";
 
+// Tu perfil de LinkedIn (opcional). Si lo pones, aparece en la página de reserva
+// para que quien agenda sepa con quién se va a reunir. Ej: "https://www.linkedin.com/in/tu-perfil"
+export const OWNER_LINKEDIN = "";
+
+// Link a tu landing para crear cuenta (opcional). Si lo pones, aparece un enlace
+// discreto en todas las pantallas. Déjalo vacío para ocultarlo.
+export const SIGNUP_URL = "";
+
 // Zona horaria con la que se interpretan tus horarios de trabajo (IANA).
 export const TIMEZONE = "America/Mexico_City";
 
