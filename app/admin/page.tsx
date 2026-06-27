@@ -55,6 +55,17 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
 
+  type Booking = {
+    id: string;
+    typeName: string;
+    inviteeName: string;
+    inviteeEmail: string;
+    start: string;
+    end: string;
+  };
+  const [bookings, setBookings] = useState<Booking[] | null>(null);
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
+
   useEffect(() => {
     setOrigin(window.location.origin);
   }, []);
@@ -71,6 +82,48 @@ export default function AdminPage() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/bookings");
+        const data = await res.json();
+        if (res.ok) setBookings(data.bookings as Booking[]);
+        else setBookings([]);
+      } catch {
+        setBookings([]);
+      }
+    })();
+  }, []);
+
+  async function cancelBooking(id: string) {
+    setCancelingId(id);
+    try {
+      const res = await fetch("/api/admin/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (res.ok) {
+        setBookings((bs) => (bs ? bs.filter((b) => b.id !== id) : bs));
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setCancelingId(null);
+    }
+  }
+
+  function fmtBooking(iso: string): string {
+    return new Intl.DateTimeFormat("es-MX", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date(iso));
+  }
 
   function patch(p: Partial<Settings>) {
     setSettings((s) => (s ? { ...s, ...p } : s));
@@ -254,6 +307,44 @@ export default function AdminPage() {
             />
           </Field>
         </Grid>
+      </Card>
+
+      {/* Próximas citas */}
+      <Card title="Próximas citas">
+        {bookings === null ? (
+          <p className="py-4 text-center text-sm text-slate-400">Cargando…</p>
+        ) : bookings.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-400">
+            No tienes citas próximas.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {bookings.map((b) => (
+              <li
+                key={b.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-900">
+                    {b.inviteeName}{" "}
+                    <span className="font-normal text-slate-400">· {b.typeName}</span>
+                  </p>
+                  <p className="truncate text-xs text-slate-500">
+                    <span className="capitalize">{fmtBooking(b.start)}</span> ·{" "}
+                    {b.inviteeEmail}
+                  </p>
+                </div>
+                <button
+                  onClick={() => cancelBooking(b.id)}
+                  disabled={cancelingId === b.id}
+                  className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-200 disabled:opacity-60"
+                >
+                  {cancelingId === b.id ? "Cancelando…" : "Cancelar"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
 
       {/* Enlaces para compartir */}

@@ -11,6 +11,7 @@ export const config = {
     "/api/accounts",
     "/api/setup",
     "/api/admin",
+    "/api/admin/bookings",
   ],
 };
 

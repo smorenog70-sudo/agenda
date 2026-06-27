@@ -10,6 +10,7 @@ type Props = {
   mt: MeetingType;
   ownerName: string;
   ownerTimezone: string;
+  reschedule?: { token: string; durationMinutes: number };
 };
 
 function detectTimezone(fallback: string): string {
@@ -77,13 +78,23 @@ const TZ_OPTIONS = [
 
 const WEEKDAYS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"];
 
-export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
+export default function BookingClient({
+  mt,
+  ownerName,
+  ownerTimezone,
+  reschedule,
+}: Props) {
   const accent = mt.color;
-  const durationOptions = mt.durationOptions ?? [mt.durationMinutes];
-  const showDurationPicker = durationOptions.length > 1;
+  const isReschedule = Boolean(reschedule);
+  const durationOptions = isReschedule
+    ? [reschedule!.durationMinutes]
+    : mt.durationOptions ?? [mt.durationMinutes];
+  const showDurationPicker = !isReschedule && durationOptions.length > 1;
 
   const [tz, setTz] = useState<string>(ownerTimezone);
-  const [duration, setDuration] = useState<number>(mt.durationMinutes);
+  const [duration, setDuration] = useState<number>(
+    isReschedule ? reschedule!.durationMinutes : mt.durationMinutes
+  );
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -230,16 +241,48 @@ export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
     void loadSlots(duration);
   }
 
+  async function submitReschedule() {
+    if (!selectedSlot || !reschedule) return;
+    setFormError(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/cita/reschedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: reschedule.token,
+          startISO: selectedSlot.start,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 409) {
+          setFormError("Ese horario se acaba de ocupar. Elige otro, por favor.");
+          setSelectedSlot(null);
+          await loadSlots(duration);
+        } else {
+          setFormError(data?.error || "No se pudo reagendar.");
+        }
+        return;
+      }
+      setConfirmed({ meetLink: null, start: selectedSlot.start, duration });
+    } catch {
+      setFormError("Hubo un problema de conexión. Intenta de nuevo.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <main className="mx-auto max-w-4xl px-5 py-10">
       <Link
-        href="/"
+        href={isReschedule ? `/cita/${reschedule!.token}` : "/"}
         className="mb-6 inline-flex items-center gap-1.5 text-sm text-slate-500 transition hover:text-slate-800"
       >
         <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12.5 4.5 7 10l5.5 5.5" />
         </svg>
-        Todos los motivos
+        {isReschedule ? "Volver a mi cita" : "Todos los motivos"}
       </Link>
 
       <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -257,6 +300,11 @@ export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
                 height={48}
                 className="mb-4 h-12 w-12 rounded-xl object-cover ring-1 ring-slate-200"
               />
+            )}
+            {isReschedule && (
+              <span className="mb-3 inline-block rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                Reagendando
+              </span>
             )}
             <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
               Con {ownerName}
@@ -287,6 +335,7 @@ export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
           <section className="p-6">
             {confirmed ? (
               <Confirmation
+                mode={isReschedule ? "rescheduled" : "created"}
                 accent={accent}
                 start={confirmed.start}
                 duration={confirmed.duration}
@@ -296,25 +345,41 @@ export default function BookingClient({ mt, ownerName, ownerTimezone }: Props) {
                 onReset={reset}
               />
             ) : selectedSlot ? (
-              <FormStep
-                accent={accent}
-                slot={selectedSlot}
-                duration={duration}
-                tz={tz}
-                name={name}
-                email={email}
-                notes={notes}
-                setName={setName}
-                setEmail={setEmail}
-                setNotes={setNotes}
-                onBack={() => {
-                  setSelectedSlot(null);
-                  setFormError(null);
-                }}
-                onSubmit={submit}
-                submitting={submitting}
-                error={formError}
-              />
+              isReschedule ? (
+                <RescheduleConfirm
+                  accent={accent}
+                  slot={selectedSlot}
+                  duration={duration}
+                  tz={tz}
+                  onBack={() => {
+                    setSelectedSlot(null);
+                    setFormError(null);
+                  }}
+                  onConfirm={submitReschedule}
+                  submitting={submitting}
+                  error={formError}
+                />
+              ) : (
+                <FormStep
+                  accent={accent}
+                  slot={selectedSlot}
+                  duration={duration}
+                  tz={tz}
+                  name={name}
+                  email={email}
+                  notes={notes}
+                  setName={setName}
+                  setEmail={setEmail}
+                  setNotes={setNotes}
+                  onBack={() => {
+                    setSelectedSlot(null);
+                    setFormError(null);
+                  }}
+                  onSubmit={submit}
+                  submitting={submitting}
+                  error={formError}
+                />
+              )
             ) : (
               <SelectStep
                 accent={accent}
@@ -773,6 +838,7 @@ function Field({
 }
 
 function Confirmation(props: {
+  mode: "created" | "rescheduled";
   accent: string;
   start: string;
   duration: number;
@@ -781,7 +847,8 @@ function Confirmation(props: {
   email: string;
   onReset: () => void;
 }) {
-  const { accent, start, duration, tz, meetLink, email, onReset } = props;
+  const { mode, accent, start, duration, tz, meetLink, email, onReset } = props;
+  const rescheduled = mode === "rescheduled";
   return (
     <div className="py-2">
       <div
@@ -793,15 +860,22 @@ function Confirmation(props: {
         </svg>
       </div>
       <h2 className="text-lg font-semibold tracking-tight text-slate-900">
-        Cita agendada
+        {rescheduled ? "Cita reagendada" : "Cita agendada"}
       </h2>
       <p className="mt-1.5 text-sm text-slate-600">
         <span className="capitalize">{dayLabel(start, tz)}</span> a las{" "}
         <span className="tabular">{timeLabel(start, tz)}</span> · {duration} min.
       </p>
       <p className="mt-3 text-sm text-slate-500">
-        Te llegó la invitación a <span className="font-medium">{email}</span>.
-        Acéptala para que quede en tu calendario.
+        {rescheduled
+          ? "Te enviamos la invitación con el nuevo horario por correo."
+          : (
+            <>
+              Te llegó la invitación a{" "}
+              <span className="font-medium">{email}</span>. Acéptala para que
+              quede en tu calendario.
+            </>
+          )}
       </p>
 
       {meetLink && (
@@ -815,15 +889,64 @@ function Confirmation(props: {
         </a>
       )}
 
-      <div className="mt-6">
-        <button
-          onClick={onReset}
-          className="text-sm font-medium underline"
-          style={{ color: accent }}
-        >
-          Agendar otra
-        </button>
+      {!rescheduled && (
+        <div className="mt-6">
+          <button
+            onClick={onReset}
+            className="text-sm font-medium underline"
+            style={{ color: accent }}
+          >
+            Agendar otra
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RescheduleConfirm(props: {
+  accent: string;
+  slot: Slot;
+  duration: number;
+  tz: string;
+  onBack: () => void;
+  onConfirm: () => void;
+  submitting: boolean;
+  error: string | null;
+}) {
+  const { accent, slot, duration, tz, onBack, onConfirm, submitting, error } = props;
+  return (
+    <div>
+      <button
+        onClick={onBack}
+        className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 transition hover:text-slate-800"
+      >
+        <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12.5 4.5 7 10l5.5 5.5" />
+        </svg>
+        Elegir otro horario
+      </button>
+
+      <h2 className="text-sm font-medium text-slate-900">Mover tu cita a:</h2>
+      <div className="mt-3 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+        <span className="capitalize">{dayLabel(slot.start, tz)}</span> ·{" "}
+        <span className="tabular">{timeLabel(slot.start, tz)}</span> · {duration} min
       </div>
+
+      {error && (
+        <p className="mt-3 text-sm text-red-600" role="alert">
+          {error}
+        </p>
+      )}
+
+      <button
+        onClick={onConfirm}
+        disabled={submitting}
+        className="mt-5 w-full rounded-xl px-4 py-3 text-sm font-medium text-white transition disabled:opacity-60"
+        style={{ backgroundColor: accent }}
+      >
+        {submitting ? "Moviendo…" : "Confirmar nuevo horario"}
+      </button>
     </div>
   );
 }

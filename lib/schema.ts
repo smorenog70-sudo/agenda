@@ -63,8 +63,14 @@ export const SCHEMA: CollectionDef[] = [
       { name: "end_time", type: "string", size: 64, required: true },
       { name: "google_event_id", type: "string", size: 256, required: false },
       { name: "notes", type: "string", size: 8000, required: false },
+      { name: "status", type: "string", size: 32, required: false },
+      { name: "cancel_token", type: "string", size: 64, required: false },
+      { name: "account_email", type: "string", size: 320, required: false },
     ],
-    indexes: [],
+    indexes: [
+      { name: "cancel_token_unique", type: "unique", attributes: ["cancel_token"] },
+      { name: "start_idx", type: "key", attributes: ["start_time"] },
+    ],
   },
   {
     id: "settings",

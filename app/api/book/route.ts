@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { DateTime, Interval } from "luxon";
 import { getAllBusy, createEvent } from "@/lib/google";
 import { createDoc, COL } from "@/lib/appwrite";
@@ -64,12 +65,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const cancelToken = randomUUID();
+    const manageUrl = `${req.nextUrl.origin}/cita/${cancelToken}`;
+
     const ev = await createEvent({
       accountEmail: mt.accountEmail,
       summary: `${mt.name}: ${name}`,
       description:
         `Cita agendada desde la página de ${settings.ownerName}.` +
-        (notes ? `\n\nNotas del invitado:\n${notes}` : ""),
+        (notes ? `\n\nNotas del invitado:\n${notes}` : "") +
+        `\n\nPara cancelar o reagendar:\n${manageUrl}`,
       startISO: start.toUTC().toISO()!,
       endISO: end.toUTC().toISO()!,
       timezone: settings.timezone,
@@ -87,6 +92,9 @@ export async function POST(req: NextRequest) {
       end_time: end.toUTC().toISO(),
       google_event_id: ev.id ?? null,
       notes: notes ?? null,
+      status: "active",
+      cancel_token: cancelToken,
+      account_email: mt.accountEmail,
     });
 
     const meetLink =
@@ -99,6 +107,7 @@ export async function POST(req: NextRequest) {
       eventId: ev.id,
       meetLink,
       htmlLink: ev.htmlLink ?? null,
+      manageUrl,
     });
   } catch (e) {
     console.error("book error:", e);

@@ -218,3 +218,42 @@ export async function createEvent(opts: {
 
   return res.data;
 }
+
+// Cancela (borra) un evento del calendario primario de la cuenta dada.
+export async function deleteEvent(accountEmail: string, eventId: string) {
+  const { client } = await clientForAccount(accountEmail);
+  const cal = google.calendar({ version: "v3", auth: client });
+  try {
+    await cal.events.delete({
+      calendarId: "primary",
+      eventId,
+      sendUpdates: "all",
+    });
+  } catch (e: unknown) {
+    // Si ya no existe (404/410), lo damos por cancelado.
+    const code = (e as { code?: number })?.code;
+    if (code !== 404 && code !== 410) throw e;
+  }
+}
+
+// Mueve un evento existente a un nuevo horario (conserva el link de Meet).
+export async function patchEventTime(opts: {
+  accountEmail: string;
+  eventId: string;
+  startISO: string;
+  endISO: string;
+  timezone: string;
+}) {
+  const { client } = await clientForAccount(opts.accountEmail);
+  const cal = google.calendar({ version: "v3", auth: client });
+  const res = await cal.events.patch({
+    calendarId: "primary",
+    eventId: opts.eventId,
+    requestBody: {
+      start: { dateTime: opts.startISO, timeZone: opts.timezone },
+      end: { dateTime: opts.endISO, timeZone: opts.timezone },
+    },
+    sendUpdates: "all",
+  });
+  return res.data;
+}
