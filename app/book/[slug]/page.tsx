@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getSettings, findMeetingType } from "@/lib/settings";
 import BookingClient from "./BookingClient";
+import PromoBar from "@/app/_components/PromoBar";
 
 export const dynamic = "force-dynamic";
 
@@ -9,11 +10,14 @@ export default async function Page({ params }: { params: { slug: string } }) {
   const mt = findMeetingType(settings, params.slug);
   if (!mt || mt.enabled === false) notFound();
   return (
-    <BookingClient
-      mt={mt}
-      ownerName={settings.ownerName}
-      ownerTimezone={settings.timezone}
-      ownerLinkedin={settings.ownerLinkedin}
-    />
+    <>
+      <PromoBar url={settings.signupUrl} />
+      <BookingClient
+        mt={mt}
+        ownerName={settings.ownerName}
+        ownerTimezone={settings.timezone}
+        ownerLinkedin={settings.ownerLinkedin}
+      />
+    </>
   );
 }

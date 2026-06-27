@@ -70,7 +70,7 @@ export default function ManageClient(props: Props) {
   const cancelled = status === "cancelled";
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-12">
+    <main className="mx-auto max-w-md px-5 py-12">
       <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="h-1.5 w-full" style={{ backgroundColor: color }} />
         <div className="p-6">

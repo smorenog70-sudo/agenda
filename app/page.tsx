@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getSettings } from "@/lib/settings";
+import PromoBar from "./_components/PromoBar";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,9 @@ export default async function Home() {
   );
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-5 py-16">
+    <>
+      <PromoBar url={settings.signupUrl} />
+      <main className="mx-auto max-w-xl px-5 py-14">
       <header className="mb-10">
         <p className="mb-2 text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
           Agenda
@@ -97,6 +100,7 @@ export default async function Home() {
           </li>
         ))}
       </ul>
-    </main>
+      </main>
+    </>
   );
 }

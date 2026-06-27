@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { findBookingByToken } from "@/lib/bookings";
 import { getSettings, findMeetingType } from "@/lib/settings";
 import BookingClient from "@/app/book/[slug]/BookingClient";
+import PromoBar from "@/app/_components/PromoBar";
 
 export const dynamic = "force-dynamic";
 
@@ -25,12 +26,15 @@ export default async function Page({
   );
 
   return (
-    <BookingClient
-      mt={mt}
-      ownerName={settings.ownerName}
-      ownerTimezone={settings.timezone}
-      ownerLinkedin={settings.ownerLinkedin}
-      reschedule={{ token: params.token, durationMinutes: durationMin }}
-    />
+    <>
+      <PromoBar url={settings.signupUrl} />
+      <BookingClient
+        mt={mt}
+        ownerName={settings.ownerName}
+        ownerTimezone={settings.timezone}
+        ownerLinkedin={settings.ownerLinkedin}
+        reschedule={{ token: params.token, durationMinutes: durationMin }}
+      />
+    </>
   );
 }

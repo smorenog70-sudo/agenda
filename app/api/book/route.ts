@@ -75,6 +75,9 @@ export async function POST(req: NextRequest) {
 
     const cancelToken = randomUUID();
     const manageUrl = `${req.nextUrl.origin}/cita/${cancelToken}`;
+    const promoUrl = settings.signupUrl?.trim()
+      ? settings.signupUrl.trim()
+      : `${req.nextUrl.origin}/landing`;
 
     const ev = await createEvent({
       accountEmail: mt.accountEmail,
@@ -83,7 +86,8 @@ export async function POST(req: NextRequest) {
         `Cita agendada desde la página de ${settings.ownerName}.` +
         `\n\nAsunto: ${cleanSubject}` +
         (notes ? `\n\nNotas del invitado:\n${notes}` : "") +
-        `\n\nPara cancelar o reagendar:\n${manageUrl}`,
+        `\n\nPara cancelar o reagendar:\n${manageUrl}` +
+        `\n\n──────────\n¿Tú también agendas reuniones? Crea tu propio calendario personalizado con SMG-Calendar:\n${promoUrl}`,
       startISO: start.toUTC().toISO()!,
       endISO: end.toUTC().toISO()!,
       timezone: settings.timezone,
