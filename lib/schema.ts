@@ -82,4 +82,13 @@ export const SCHEMA: CollectionDef[] = [
     ],
     indexes: [],
   },
+  {
+    id: "waitlist",
+    name: "waitlist",
+    attributes: [
+      { name: "email", type: "string", size: 320, required: true },
+      { name: "source", type: "string", size: 64, required: false },
+    ],
+    indexes: [{ name: "email_unique", type: "unique", attributes: ["email"] }],
+  },
 ];

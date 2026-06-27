@@ -34,6 +34,7 @@ export const COL = {
   calendars: "calendars",
   bookings: "bookings",
   settings: "settings",
+  waitlist: "waitlist",
 } as const;
 
 // Quita claves undefined/null para no chocar con los atributos de Appwrite.

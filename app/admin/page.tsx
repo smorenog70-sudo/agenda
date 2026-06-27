@@ -69,6 +69,16 @@ export default function AdminPage() {
   const [bookings, setBookings] = useState<Booking[] | null>(null);
   const [cancelingId, setCancelingId] = useState<string | null>(null);
 
+  type WaitlistEntry = {
+    id: string;
+    email: string;
+    source: string;
+    createdAt: string;
+  };
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[] | null>(null);
+  const [waitlistTotal, setWaitlistTotal] = useState(0);
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     setOrigin(window.location.origin);
   }, []);
@@ -98,6 +108,32 @@ export default function AdminPage() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/waitlist");
+        const data = await res.json();
+        if (res.ok) {
+          setWaitlist(data.items as WaitlistEntry[]);
+          setWaitlistTotal(data.total as number);
+        } else {
+          setWaitlist([]);
+        }
+      } catch {
+        setWaitlist([]);
+      }
+    })();
+  }, []);
+
+  function copyEmails() {
+    if (!waitlist || waitlist.length === 0) return;
+    const text = waitlist.map((w) => w.email).join(", ");
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
 
   async function cancelBooking(id: string) {
     setCancelingId(id);
@@ -370,6 +406,44 @@ export default function AdminPage() {
               </li>
             ))}
           </ul>
+        )}
+      </Card>
+
+      {/* Lista de espera (landing) */}
+      <Card title={`Lista de espera${waitlistTotal ? ` · ${waitlistTotal}` : ""}`}>
+        {waitlist === null ? (
+          <p className="py-4 text-center text-sm text-slate-400">Cargando…</p>
+        ) : waitlist.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-400">
+            Aún no hay registros. Comparte tu landing para empezar a capturar correos.
+          </p>
+        ) : (
+          <>
+            <div className="mb-3 flex justify-end">
+              <button
+                onClick={copyEmails}
+                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300"
+              >
+                {copied ? "¡Copiados!" : "Copiar correos"}
+              </button>
+            </div>
+            <ul className="max-h-72 space-y-1.5 overflow-auto">
+              {waitlist.map((w) => (
+                <li
+                  key={w.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2 text-sm"
+                >
+                  <span className="truncate text-slate-800">{w.email}</span>
+                  <span className="shrink-0 text-xs text-slate-400">
+                    {new Intl.DateTimeFormat("es-MX", {
+                      day: "numeric",
+                      month: "short",
+                    }).format(new Date(w.createdAt))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </Card>
 
