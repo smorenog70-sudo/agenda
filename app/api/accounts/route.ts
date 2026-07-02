@@ -13,17 +13,18 @@ export async function GET() {
       Query.limit(100),
     ]);
 
-    const result: { email: string; conflictCalendars: number }[] = [];
-    for (const a of accountsRes.documents) {
-      const calsRes = await db.listDocuments(dbId, COL.calendars, [
-        Query.equal("account_id", [a.$id]),
-        Query.limit(200),
-      ]);
-      const conflictCalendars = calsRes.documents.filter(
-        (c) => c.check_for_conflicts
-      ).length;
-      result.push({ email: a.email as string, conflictCalendars });
-    }
+    const result = await Promise.all(
+      accountsRes.documents.map(async (a) => {
+        const calsRes = await db.listDocuments(dbId, COL.calendars, [
+          Query.equal("account_id", [a.$id]),
+          Query.limit(200),
+        ]);
+        const conflictCalendars = calsRes.documents.filter(
+          (c) => c.check_for_conflicts
+        ).length;
+        return { email: a.email as string, conflictCalendars };
+      })
+    );
 
     return NextResponse.json({ accounts: result });
   } catch (e) {

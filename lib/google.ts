@@ -1,5 +1,5 @@
 import { google } from "googleapis";
-import { Query } from "node-appwrite";
+import { Query, Models } from "node-appwrite";
 import {
   getDb,
   getDatabaseId,
@@ -69,33 +69,29 @@ export async function handleCallback(code: string): Promise<string> {
 
   const cal = google.calendar({ version: "v3", auth: client });
   const list = await cal.calendarList.list({ maxResults: 250 });
-  const items = list.data.items ?? [];
-  for (const it of items) {
-    if (!it.id) continue;
-    const owned =
-      it.accessRole === "owner" ||
-      it.accessRole === "writer" ||
-      it.primary === true;
-    await upsertByField(COL.calendars, "google_id", it.id, {
-      google_id: it.id,
-      account_id: acc.$id,
-      summary: it.summary ?? it.id,
-      // Por defecto contamos como ocupado lo que esté en calendarios propios.
-      check_for_conflicts: owned,
-    });
-  }
+  const items = (list.data.items ?? []).filter((it) => it.id);
+  await Promise.all(
+    items.map((it) => {
+      const owned =
+        it.accessRole === "owner" ||
+        it.accessRole === "writer" ||
+        it.primary === true;
+      return upsertByField(COL.calendars, "google_id", it.id!, {
+        google_id: it.id,
+        account_id: acc.$id,
+        summary: it.summary ?? it.id,
+        // Por defecto contamos como ocupado lo que esté en calendarios propios.
+        check_for_conflicts: owned,
+      });
+    })
+  );
 
   return email;
 }
 
-// Construye un cliente autenticado para una cuenta, refrescando y persistiendo
-// los tokens cuando hace falta.
-async function clientForAccount(email: string) {
-  const acc = await findOneByField(COL.accounts, "email", email);
-  if (!acc) {
-    throw new Error(`La cuenta ${email} no está conectada. Conéctala en /connect.`);
-  }
-
+// Construye un cliente autenticado a partir de un documento de cuenta ya cargado,
+// refrescando y persistiendo los tokens cuando hace falta.
+function buildClientForAccount(acc: Models.Document) {
   const client = oauthClient();
   client.setCredentials({
     access_token: acc.access_token ?? undefined,
@@ -116,7 +112,16 @@ async function clientForAccount(email: string) {
     }
   });
 
-  return { client, account: acc };
+  return client;
+}
+
+// Busca la cuenta por correo y construye su cliente autenticado.
+async function clientForAccount(email: string) {
+  const acc = await findOneByField(COL.accounts, "email", email);
+  if (!acc) {
+    throw new Error(`La cuenta ${email} no está conectada. Conéctala en /connect.`);
+  }
+  return { client: buildClientForAccount(acc), account: acc };
 }
 
 // Free/busy combinado de TODAS las cuentas conectadas y sus calendarios marcados.
@@ -132,43 +137,46 @@ export async function getAllBusy(
   const accounts = accountsRes.documents;
   if (accounts.length === 0) return [];
 
-  const all: BusyInterval[] = [];
+  // Cada cuenta es independiente: las consultamos en paralelo. Si una falla
+  // (token revocado, etc.) devolvemos [] para ella y seguimos con las demás.
+  const perAccount = await Promise.all(
+    accounts.map(async (a): Promise<BusyInterval[]> => {
+      try {
+        // Traemos los calendarios de la cuenta (account_id tiene índice) y
+        // filtramos en JS los marcados para conflictos.
+        const calsRes = await db.listDocuments(dbId, COL.calendars, [
+          Query.equal("account_id", [a.$id]),
+          Query.limit(200),
+        ]);
+        const cals = calsRes.documents.filter((c) => c.check_for_conflicts);
+        if (cals.length === 0) return [];
 
-  for (const a of accounts) {
-    // Traemos los calendarios de la cuenta (account_id tiene índice) y
-    // filtramos en JS los marcados para conflictos.
-    const calsRes = await db.listDocuments(dbId, COL.calendars, [
-      Query.equal("account_id", [a.$id]),
-      Query.limit(200),
-    ]);
-    const cals = calsRes.documents.filter((c) => c.check_for_conflicts);
-    if (cals.length === 0) continue;
-
-    try {
-      const { client } = await clientForAccount(a.email);
-      const cal = google.calendar({ version: "v3", auth: client });
-      const fb = await cal.freebusy.query({
-        requestBody: {
-          timeMin,
-          timeMax,
-          items: cals.map((c) => ({ id: c.google_id as string })),
-        },
-      });
-      const calendarsObj = fb.data.calendars ?? {};
-      for (const key of Object.keys(calendarsObj)) {
-        const busy = calendarsObj[key].busy ?? [];
-        for (const b of busy) {
-          if (b.start && b.end) all.push({ start: b.start, end: b.end });
+        // Reusamos el documento de cuenta ya cargado (sin releer de la BD).
+        const client = buildClientForAccount(a);
+        const cal = google.calendar({ version: "v3", auth: client });
+        const fb = await cal.freebusy.query({
+          requestBody: {
+            timeMin,
+            timeMax,
+            items: cals.map((c) => ({ id: c.google_id as string })),
+          },
+        });
+        const calendarsObj = fb.data.calendars ?? {};
+        const busy: BusyInterval[] = [];
+        for (const key of Object.keys(calendarsObj)) {
+          for (const b of calendarsObj[key].busy ?? []) {
+            if (b.start && b.end) busy.push({ start: b.start, end: b.end });
+          }
         }
+        return busy;
+      } catch (e) {
+        console.error(`Error de free/busy para ${a.email}:`, e);
+        return [];
       }
-    } catch (e) {
-      // Si una cuenta falla (token revocado, etc.) seguimos con las demás,
-      // pero lo dejamos en el log para que lo notes.
-      console.error(`Error de free/busy para ${a.email}:`, e);
-    }
-  }
+    })
+  );
 
-  return all;
+  return perAccount.flat();
 }
 
 // Crea el evento en el calendario primario de la cuenta del tipo de cita.
