@@ -36,6 +36,16 @@ function msg(e: unknown): string {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+function createAttribute(db: Databases, dbId: string, colId: string, attr: (typeof SCHEMA)[number]["attributes"][number]) {
+  if (attr.type === "string") {
+    return db.createStringAttribute(dbId, colId, attr.name, attr.size, attr.required, attr.default);
+  }
+  if (attr.type === "integer") {
+    return db.createIntegerAttribute(dbId, colId, attr.name, attr.required, undefined, undefined, attr.default);
+  }
+  return db.createBooleanAttribute(dbId, colId, attr.name, attr.required, attr.default);
+}
+
 export async function POST() {
   const created: string[] = [];
   const existing: string[] = [];
@@ -51,99 +61,82 @@ export async function POST() {
     return NextResponse.json({ ok: false, error: msg(e) }, { status: 400 });
   }
 
-  // 1. Base de datos
-  try {
-    await db.create(dbId, "Agenda");
-    created.push(`Base de datos "${dbId}"`);
-  } catch (e) {
-    if (isConflict(e)) existing.push(`Base de datos "${dbId}"`);
-    else errors.push(`Base de datos: ${msg(e)}`);
-  }
-
-  // 2. Colecciones + atributos
-  for (const col of SCHEMA) {
+  // Ejecuta una operación de creación y la clasifica: creada / ya existía / error.
+  // Se hace en paralelo para no exceder el límite de tiempo de la función serverless.
+  async function attempt(label: string, fn: () => Promise<unknown>) {
     try {
-      await db.createCollection(dbId, col.id, col.name);
-      created.push(`Colección "${col.id}"`);
+      await fn();
+      created.push(label);
     } catch (e) {
-      if (isConflict(e)) existing.push(`Colección "${col.id}"`);
-      else errors.push(`Colección "${col.id}": ${msg(e)}`);
+      if (isConflict(e)) existing.push(label);
+      else errors.push(`${label}: ${msg(e)}`);
     }
+  }
 
-    for (const attr of col.attributes) {
-      try {
-        if (attr.type === "string") {
-          await db.createStringAttribute(
-            dbId,
-            col.id,
-            attr.name,
-            attr.size,
-            attr.required,
-            attr.default
+  // 1. Base de datos
+  await attempt(`Base de datos "${dbId}"`, () => db.create(dbId, "Agenda"));
+
+  // 2. Colecciones (en paralelo)
+  await Promise.all(
+    SCHEMA.map((col) =>
+      attempt(`Colección "${col.id}"`, () => db.createCollection(dbId, col.id, col.name))
+    )
+  );
+
+  // 3. Atributos de todas las colecciones (en paralelo)
+  await Promise.all(
+    SCHEMA.flatMap((col) =>
+      col.attributes.map((attr) =>
+        attempt(`  ${col.id}.${attr.name}`, () => createAttribute(db, dbId, col.id, attr))
+      )
+    )
+  );
+
+  // 4. Espera acotada (máx ~5s) a que los atributos estén "available" para indexarlos.
+  //    Consultamos todas las colecciones en paralelo para no gastar el presupuesto.
+  const withIndexes = SCHEMA.filter((c) => c.indexes.length > 0).map((c) => ({
+    id: c.id,
+    keys: new Set(c.indexes.flatMap((i) => i.attributes)),
+  }));
+  const deadline = Date.now() + 5000;
+  while (withIndexes.length > 0 && Date.now() < deadline) {
+    const ready = await Promise.all(
+      withIndexes.map(async (c) => {
+        try {
+          const res = await db.listAttributes(dbId, c.id);
+          const status = new Map(
+            (res.attributes as unknown as Array<{ key: string; status: string }>).map(
+              (a) => [a.key, a.status]
+            )
           );
-        } else if (attr.type === "integer") {
-          await db.createIntegerAttribute(
-            dbId,
-            col.id,
-            attr.name,
-            attr.required,
-            undefined,
-            undefined,
-            attr.default
-          );
-        } else {
-          await db.createBooleanAttribute(
-            dbId,
-            col.id,
-            attr.name,
-            attr.required,
-            attr.default
-          );
+          return Array.from(c.keys).every((k) => status.get(k) === "available");
+        } catch {
+          return false;
         }
-        created.push(`  ${col.id}.${attr.name}`);
-      } catch (e) {
-        if (isConflict(e)) existing.push(`  ${col.id}.${attr.name}`);
-        else errors.push(`  ${col.id}.${attr.name}: ${msg(e)}`);
-      }
-    }
+      })
+    );
+    if (ready.every(Boolean)) break;
+    await sleep(1000);
   }
 
-  // 3. Esperar (brevemente) a que los atributos estén "available" para indexarlos.
-  for (const col of SCHEMA) {
-    if (col.indexes.length === 0) continue;
-    const needed = new Set(col.indexes.flatMap((i) => i.attributes));
-    const deadline = Date.now() + 6000;
-    while (Date.now() < deadline) {
-      try {
-        const res = await db.listAttributes(dbId, col.id);
-        const list = res.attributes as unknown as Array<{
-          key: string;
-          status: string;
-        }>;
-        const status = new Map(list.map((a) => [a.key, a.status]));
-        if (Array.from(needed).every((k) => status.get(k) === "available")) break;
-      } catch {
-        // si falla la lectura, reintentamos en el siguiente ciclo
-      }
-      await sleep(1200);
-    }
-  }
-
-  // 4. Índices
-  for (const col of SCHEMA) {
-    for (const idx of col.indexes) {
-      try {
-        const type = idx.type === "unique" ? IndexType.Unique : IndexType.Key;
-        const orders = idx.attributes.map(() => "ASC");
-        await db.createIndex(dbId, col.id, idx.name, type, idx.attributes, orders);
-        created.push(`  índice ${col.id}.${idx.name}`);
-      } catch (e) {
-        if (isConflict(e)) existing.push(`  índice ${col.id}.${idx.name}`);
-        // Si el atributo aún no estaba listo, lo dejamos pendiente para reintentar.
-        else pending.push(`  índice ${col.id}.${idx.name}`);
-      }
-    }
-  }
+  // 5. Índices (en paralelo). Si un atributo aún no está listo, el índice falla y lo
+  //    dejamos "pendiente": basta con volver a darle al botón para terminarlo.
+  await Promise.all(
+    SCHEMA.flatMap((col) =>
+      col.indexes.map(async (idx) => {
+        const label = `  índice ${col.id}.${idx.name}`;
+        try {
+          const type = idx.type === "unique" ? IndexType.Unique : IndexType.Key;
+          const orders = idx.attributes.map(() => "ASC");
+          await db.createIndex(dbId, col.id, idx.name, type, idx.attributes, orders);
+          created.push(label);
+        } catch (e) {
+          if (isConflict(e)) existing.push(label);
+          else pending.push(label);
+        }
+      })
+    )
+  );
 
   const ok = errors.length === 0 && pending.length === 0;
   return NextResponse.json({ ok, created, existing, pending, errors });
