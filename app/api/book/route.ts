@@ -125,8 +125,10 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     console.error("book error:", e);
+    // TEMPORAL (diagnóstico): mostramos el motivo real en pantalla.
+    const detail = e instanceof Error ? e.message : String(e);
     return NextResponse.json(
-      { error: "No se pudo crear la cita. Intenta de nuevo." },
+      { error: `No se pudo crear la cita. Motivo: ${detail}` },
       { status: 500 }
     );
   }
