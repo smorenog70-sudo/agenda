@@ -1,94 +1,72 @@
-// Definición de las colecciones de Appwrite. La usa /api/setup para crear todo
-// automáticamente. Si algún día cambias el modelo, edítalo aquí.
+// Definición de las tablas de Postgres (Neon). La usa /api/setup para crear todo
+// automáticamente con DDL idempotente. Si algún día cambias el modelo, edítalo aquí.
 
-export type AttrDef =
-  | { name: string; type: "string"; size: number; required: boolean; default?: string }
-  | { name: string; type: "integer"; required: boolean; default?: number }
-  | { name: string; type: "boolean"; required: boolean; default?: boolean };
-
-export type IndexDef = {
-  name: string;
-  type: "key" | "unique";
-  attributes: string[];
+export type TableDef = {
+  id: string; // nombre de la tabla
+  // Cada columna es una línea de DDL, ya con tipo/constraints/default.
+  columns: string[];
+  // Índices adicionales (los UNIQUE de columna se declaran en `columns`).
+  indexes: { name: string; unique: boolean; columns: string[] }[];
 };
 
-export type CollectionDef = {
-  id: string;
-  name: string;
-  attributes: AttrDef[];
-  indexes: IndexDef[];
-};
+// Todas las tablas llevan estas dos columnas (equivalen a $id / $createdAt de Appwrite).
+const BASE = [
+  `id text PRIMARY KEY DEFAULT gen_random_uuid()::text`,
+  `created_at timestamptz NOT NULL DEFAULT now()`,
+];
 
-export const SCHEMA: CollectionDef[] = [
+export const SCHEMA: TableDef[] = [
   {
     id: "accounts",
-    name: "accounts",
-    attributes: [
-      { name: "email", type: "string", size: 320, required: true },
-      { name: "access_token", type: "string", size: 4096, required: false },
-      { name: "refresh_token", type: "string", size: 1024, required: false },
-      { name: "expiry_date", type: "integer", required: false },
-      { name: "scope", type: "string", size: 2048, required: false },
-      { name: "token_type", type: "string", size: 64, required: false },
-    ],
-    indexes: [{ name: "email_unique", type: "unique", attributes: ["email"] }],
-  },
-  {
-    id: "calendars",
-    name: "calendars",
-    attributes: [
-      { name: "google_id", type: "string", size: 320, required: true },
-      { name: "account_id", type: "string", size: 64, required: false },
-      { name: "summary", type: "string", size: 1024, required: false },
-      {
-        name: "check_for_conflicts",
-        type: "boolean",
-        required: false,
-        default: true,
-      },
-    ],
-    indexes: [
-      { name: "google_id_unique", type: "unique", attributes: ["google_id"] },
-      { name: "account_idx", type: "key", attributes: ["account_id"] },
-    ],
-  },
-  {
-    id: "bookings",
-    name: "bookings",
-    attributes: [
-      { name: "meeting_type", type: "string", size: 128, required: true },
-      { name: "invitee_name", type: "string", size: 256, required: true },
-      { name: "invitee_email", type: "string", size: 320, required: true },
-      { name: "start_time", type: "string", size: 64, required: true },
-      { name: "end_time", type: "string", size: 64, required: true },
-      { name: "google_event_id", type: "string", size: 256, required: false },
-      { name: "notes", type: "string", size: 8000, required: false },
-      { name: "subject", type: "string", size: 500, required: false },
-      { name: "status", type: "string", size: 32, required: false },
-      { name: "cancel_token", type: "string", size: 64, required: false },
-      { name: "account_email", type: "string", size: 320, required: false },
-    ],
-    indexes: [
-      { name: "cancel_token_unique", type: "unique", attributes: ["cancel_token"] },
-      { name: "start_idx", type: "key", attributes: ["start_time"] },
-    ],
-  },
-  {
-    id: "settings",
-    name: "settings",
-    attributes: [
-      // Un solo documento (id "config") con toda la configuración en JSON.
-      { name: "data", type: "string", size: 1000000, required: false },
+    columns: [
+      ...BASE,
+      `email text NOT NULL UNIQUE`,
+      `access_token text`,
+      `refresh_token text`,
+      `expiry_date bigint`,
+      `scope text`,
+      `token_type text`,
     ],
     indexes: [],
   },
   {
-    id: "waitlist",
-    name: "waitlist",
-    attributes: [
-      { name: "email", type: "string", size: 320, required: true },
-      { name: "source", type: "string", size: 64, required: false },
+    id: "calendars",
+    columns: [
+      ...BASE,
+      `google_id text NOT NULL UNIQUE`,
+      `account_id text REFERENCES accounts(id) ON DELETE CASCADE`,
+      `summary text`,
+      `check_for_conflicts boolean NOT NULL DEFAULT true`,
     ],
-    indexes: [{ name: "email_unique", type: "unique", attributes: ["email"] }],
+    indexes: [{ name: "calendars_account_idx", unique: false, columns: ["account_id"] }],
+  },
+  {
+    id: "bookings",
+    columns: [
+      ...BASE,
+      `meeting_type text NOT NULL`,
+      `invitee_name text NOT NULL`,
+      `invitee_email text NOT NULL`,
+      `start_time text NOT NULL`,
+      `end_time text NOT NULL`,
+      `google_event_id text`,
+      `notes text`,
+      `subject text`,
+      `status text`,
+      `cancel_token text UNIQUE`,
+      `account_email text`,
+    ],
+    indexes: [{ name: "bookings_start_idx", unique: false, columns: ["start_time"] }],
+  },
+  {
+    id: "settings",
+    // Una sola fila (id "config") con toda la configuración en JSON (texto).
+    columns: [...BASE, `data text`],
+    indexes: [],
+  },
+  {
+    id: "waitlist",
+    columns: [...BASE, `email text NOT NULL UNIQUE`, `source text`],
+    indexes: [],
   },
 ];

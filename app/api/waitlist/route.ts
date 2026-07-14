@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findOneByField, createDoc, COL } from "@/lib/appwrite";
+import { findOneByField, createDoc, COL } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 

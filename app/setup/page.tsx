@@ -40,8 +40,8 @@ export default function SetupPage() {
           Crear la base de datos
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-500">
-          Esto crea automáticamente en Appwrite todo lo que la app necesita
-          (colecciones, atributos e índices). No tienes que crear nada a mano.
+          Esto crea automáticamente en tu base de datos Neon todo lo que la app
+          necesita (tablas e índices). No tienes que crear nada a mano.
           Es seguro repetirlo: lo que ya exista se respeta.
         </p>
       </header>
@@ -56,7 +56,7 @@ export default function SetupPage() {
 
       {loading && (
         <p className="mt-3 text-center text-xs text-slate-400">
-          Esto puede tardar unos segundos mientras Appwrite procesa los atributos.
+          Esto puede tardar unos segundos mientras se crean las tablas.
         </p>
       )}
 

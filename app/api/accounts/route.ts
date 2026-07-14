@@ -1,25 +1,22 @@
 import { NextResponse } from "next/server";
-import { Query } from "node-appwrite";
-import { getDb, getDatabaseId, COL } from "@/lib/appwrite";
+import { getSql, COL, SELECT_ALL, Row } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const db = getDb();
-    const dbId = getDatabaseId();
-    const accountsRes = await db.listDocuments(dbId, COL.accounts, [
-      Query.orderAsc("$createdAt"),
-      Query.limit(100),
-    ]);
+    const sql = getSql();
+    const accounts = (await sql(
+      `SELECT ${SELECT_ALL} FROM "${COL.accounts}" ORDER BY created_at ASC LIMIT 100`
+    )) as Row[];
 
     const result = await Promise.all(
-      accountsRes.documents.map(async (a) => {
-        const calsRes = await db.listDocuments(dbId, COL.calendars, [
-          Query.equal("account_id", [a.$id]),
-          Query.limit(200),
-        ]);
-        const conflictCalendars = calsRes.documents.filter(
+      accounts.map(async (a) => {
+        const cals = (await sql(
+          `SELECT ${SELECT_ALL} FROM "${COL.calendars}" WHERE account_id = $1 LIMIT 200`,
+          [a.$id]
+        )) as Row[];
+        const conflictCalendars = cals.filter(
           (c) => c.check_for_conflicts
         ).length;
         return { email: a.email as string, conflictCalendars };

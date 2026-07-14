@@ -10,7 +10,7 @@ import {
   WORKING_HOURS,
   meetingTypes as DEFAULT_MEETING_TYPES,
 } from "@/config";
-import { getDb, getDatabaseId, COL } from "./appwrite";
+import { getSql, COL } from "./db";
 
 export type WorkingDay = { start: string; end: string } | null;
 
@@ -124,12 +124,15 @@ export function normalizeSettings(raw: any): Settings {
   };
 }
 
-// Lee la configuración guardada; si no existe o falla Appwrite, usa los defaults.
+// Lee la configuración guardada; si no existe o falla la BD, usa los defaults.
 export async function getSettings(): Promise<Settings> {
   try {
-    const db = getDb();
-    const doc = await db.getDocument(getDatabaseId(), COL.settings, SETTINGS_DOC_ID);
-    const data = (doc as any).data;
+    const sql = getSql();
+    const rows = (await sql(
+      `SELECT data FROM "${COL.settings}" WHERE id = $1 LIMIT 1`,
+      [SETTINGS_DOC_ID]
+    )) as { data: string | null }[];
+    const data = rows[0]?.data;
     if (typeof data === "string" && data.length > 0) {
       return normalizeSettings(JSON.parse(data));
     }
@@ -139,16 +142,15 @@ export async function getSettings(): Promise<Settings> {
   }
 }
 
-// Guarda la configuración en un único documento (id fijo "config").
+// Guarda la configuración en una única fila (id fijo "config").
 export async function saveSettings(settings: Settings): Promise<void> {
-  const db = getDb();
-  const dbId = getDatabaseId();
+  const sql = getSql();
   const payload = JSON.stringify(settings);
-  try {
-    await db.updateDocument(dbId, COL.settings, SETTINGS_DOC_ID, { data: payload });
-  } catch {
-    await db.createDocument(dbId, COL.settings, SETTINGS_DOC_ID, { data: payload });
-  }
+  await sql(
+    `INSERT INTO "${COL.settings}" (id, data) VALUES ($1, $2)
+     ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data`,
+    [SETTINGS_DOC_ID, payload]
+  );
 }
 
 export function findMeetingType(

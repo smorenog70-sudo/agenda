@@ -1,6 +1,5 @@
 import { DateTime, Interval } from "luxon";
-import { Query } from "node-appwrite";
-import { getDb, getDatabaseId, COL } from "./appwrite";
+import { getSql, COL, SELECT_ALL } from "./db";
 import { getAllBusy, deleteEvent, patchEventTime } from "./google";
 import { getSettings } from "./settings";
 
@@ -23,19 +22,22 @@ export async function findBookingByToken(
   token: string
 ): Promise<BookingDoc | null> {
   if (!token) return null;
-  const db = getDb();
-  const res = await db.listDocuments(getDatabaseId(), COL.bookings, [
-    Query.equal("cancel_token", [token]),
-    Query.limit(1),
-  ]);
-  return (res.documents[0] as unknown as BookingDoc) ?? null;
+  const sql = getSql();
+  const rows = (await sql(
+    `SELECT ${SELECT_ALL} FROM "${COL.bookings}" WHERE cancel_token = $1 LIMIT 1`,
+    [token]
+  )) as unknown as BookingDoc[];
+  return rows[0] ?? null;
 }
 
 export async function getBookingById(id: string): Promise<BookingDoc | null> {
   try {
-    const db = getDb();
-    const doc = await db.getDocument(getDatabaseId(), COL.bookings, id);
-    return doc as unknown as BookingDoc;
+    const sql = getSql();
+    const rows = (await sql(
+      `SELECT ${SELECT_ALL} FROM "${COL.bookings}" WHERE id = $1 LIMIT 1`,
+      [id]
+    )) as unknown as BookingDoc[];
+    return rows[0] ?? null;
   } catch {
     return null;
   }
@@ -50,10 +52,11 @@ export async function cancelBooking(doc: BookingDoc): Promise<void> {
       // Seguimos: marcamos la cita como cancelada de todos modos.
     }
   }
-  const db = getDb();
-  await db.updateDocument(getDatabaseId(), COL.bookings, doc.$id, {
-    status: "cancelled",
-  });
+  const sql = getSql();
+  await sql(
+    `UPDATE "${COL.bookings}" SET status = $1 WHERE id = $2`,
+    ["cancelled", doc.$id]
+  );
 }
 
 export async function rescheduleBooking(
@@ -97,23 +100,25 @@ export async function rescheduleBooking(
     });
   }
 
-  const db = getDb();
-  await db.updateDocument(getDatabaseId(), COL.bookings, doc.$id, {
-    start_time: start.toUTC().toISO(),
-    end_time: end.toUTC().toISO(),
-  });
+  const sql = getSql();
+  await sql(
+    `UPDATE "${COL.bookings}" SET start_time = $1, end_time = $2 WHERE id = $3`,
+    [start.toUTC().toISO(), end.toUTC().toISO(), doc.$id]
+  );
   return { start: start.toUTC().toISO()!, end: end.toUTC().toISO()! };
 }
 
 export async function listUpcomingBookings(): Promise<BookingDoc[]> {
-  const db = getDb();
+  const sql = getSql();
   const nowISO = DateTime.now().toUTC().toISO()!;
-  const res = await db.listDocuments(getDatabaseId(), COL.bookings, [
-    Query.greaterThan("start_time", nowISO),
-    Query.orderAsc("start_time"),
-    Query.limit(100),
-  ]);
-  return (res.documents as unknown as BookingDoc[]).filter(
-    (b) => b.status !== "cancelled"
-  );
+  // start_time se guarda como ISO UTC en texto: el orden lexicográfico coincide
+  // con el cronológico, así que la comparación ">" funciona igual que antes.
+  const rows = (await sql(
+    `SELECT ${SELECT_ALL} FROM "${COL.bookings}"
+     WHERE start_time > $1
+     ORDER BY start_time ASC
+     LIMIT 100`,
+    [nowISO]
+  )) as unknown as BookingDoc[];
+  return rows.filter((b) => b.status !== "cancelled");
 }

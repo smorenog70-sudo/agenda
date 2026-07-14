@@ -15,7 +15,7 @@ y le llega la invitación de Google Calendar (con link de Meet) automáticamente
 ## Cómo funciona (en corto)
 
 1. Tú conectas tus 4 cuentas de Google una sola vez (en `/connect`, protegido con contraseña).
-2. La app guarda los tokens en Appwrite y descubre los calendarios de cada cuenta.
+2. La app guarda los tokens en Neon (Postgres) y descubre los calendarios de cada cuenta.
 3. Cuando alguien abre `/book/heru` (por ejemplo), la app consulta el **free/busy** de
    todas tus cuentas, calcula los huecos libres dentro de tu horario laboral y muestra
    solo lo realmente disponible.
@@ -27,7 +27,7 @@ y le llega la invitación de Google Calendar (con link de Meet) automáticamente
 ## Stack
 
 - **Next.js 14** (App Router) + **TypeScript**
-- **Appwrite** (Appwrite Cloud) para guardar tokens, calendarios y el historial de citas
+- **Neon** (Postgres serverless) para guardar tokens, calendarios y el historial de citas
 - **googleapis** para OAuth, free/busy y crear eventos
 - **luxon** para la matemática de zonas horarias en el servidor
 - **Tailwind** para el estilo
@@ -36,7 +36,7 @@ y le llega la invitación de Google Calendar (con link de Meet) automáticamente
 
 ## Puesta en marcha — TODO por el navegador, SIN terminal
 
-Vas a usar 4 consolas web: **Google Cloud, Appwrite, GitHub y Vercel**. El `npm install`
+Vas a usar 4 consolas web: **Google Cloud, Neon, GitHub y Vercel**. El `npm install`
 y la compilación corren **en los servidores de Vercel**, no en tu compu. Tú no abres
 terminal en ningún momento.
 
@@ -57,21 +57,20 @@ terminal en ningún momento.
      tu dominio de Vercel).
    - Guarda y copia el **Client ID** y el **Client Secret**.
 
-### 2. Appwrite
+### 2. Neon (base de datos Postgres)
 
-No necesitas crear la base ni las colecciones a mano: una página de la app (`/setup`) las
-crea solas después de desplegar. Aquí solo consigues las llaves.
+No necesitas crear las tablas a mano: una página de la app (`/setup`) las crea solas
+después de desplegar. Aquí solo consigues la cadena de conexión.
 
-1. Crea cuenta y un **proyecto** en <https://cloud.appwrite.io>.
-2. Crea una **API key** (Project Settings → **API keys → Create API key**) con **todos
-   los scopes del grupo *Databases*** (la app necesita crear colecciones, atributos e
-   índices). Copia el secreto → `APPWRITE_API_KEY`.
-3. Copia el **Project ID** y el **API Endpoint** (suele ser regional, ej.
-   `https://nyc.cloud.appwrite.io/v1`) → `APPWRITE_PROJECT_ID` y `APPWRITE_ENDPOINT`.
-4. Elige un **Database ID** simple, ej. `main` → `APPWRITE_DATABASE_ID`.
+1. Crea cuenta y un **proyecto** en <https://neon.tech> (elige la región más cercana a
+   tu despliegue de Vercel).
+2. Copia la **Connection string**, variante **Pooled connection** (recomendada para
+   funciones serverless). Tiene la forma
+   `postgresql://USER:PASSWORD@ep-xxxx-pooler.REGION.aws.neon.tech/neondb?sslmode=require`
+   → va en `DATABASE_URL`.
 
 Detalle (y la forma manual, por si la prefieres) en
-[`appwrite/SETUP.md`](appwrite/SETUP.md).
+[`neon/SETUP.md`](neon/SETUP.md).
 
 ### 3. Sube el código a GitHub (sin terminal)
 
@@ -94,8 +93,8 @@ Vercel necesita el código en un repo de GitHub. Dos maneras, ninguna usa termin
 1. Entra a <https://vercel.com> con tu cuenta de GitHub.
 2. *Add New → Project → Import* el repo que creaste.
 3. Vercel detecta Next.js solo. **Antes de dar Deploy**, abre **Environment Variables** y
-   agrega todas las de [`.env.example`](.env.example): las de Google, las de Appwrite y
-   `ADMIN_PASSWORD`. Para `GOOGLE_REDIRECT_URI` pon de momento cualquier valor temporal
+   agrega todas las de [`.env.example`](.env.example): las de Google, `DATABASE_URL` (Neon)
+   y `ADMIN_PASSWORD`. Para `GOOGLE_REDIRECT_URI` pon de momento cualquier valor temporal
    (lo arreglas en el paso 5).
 4. **Deploy**. Vercel instala y compila en la nube. Al terminar te da tu URL pública
    (algo como `https://agenda-xxxx.vercel.app`).
@@ -103,9 +102,8 @@ Vercel necesita el código en un repo de GitHub. Dos maneras, ninguna usa termin
 ### 5. Crea la base de datos (un clic)
 
 1. Entra a `https://TU-URL.vercel.app/setup` → te pedirá tu `ADMIN_PASSWORD`.
-2. Dale al botón **"Crear / verificar la base de datos"**. La app crea sola en Appwrite
-   las colecciones, atributos e índices. Si dice "pendiente", espera unos segundos y dale
-   otra vez (es seguro repetir).
+2. Dale al botón **"Crear / verificar la base de datos"**. La app crea sola en Neon
+   las tablas e índices. Es seguro repetir (usa `CREATE TABLE IF NOT EXISTS`).
 
 ### 6. Conecta el dominio con Google
 
@@ -135,13 +133,13 @@ Vercel necesita el código en un repo de GitHub. Dos maneras, ninguna usa termin
   las tuyas, esto está bien. La gente que **agenda no autoriza nada**, así que a ellos no
   les afecta. Si algún día publicas la app (modo *Production* para terceros), ahí sí
   tendrías que pasar verificación.
-- **Seguridad de la API key.** La `APPWRITE_API_KEY` y los tokens de Google dan acceso
-  total. Solo se usan en el servidor (nunca en el cliente) y nunca deben subirse a git.
-  El `.gitignore` ya excluye `.env.local`.
+- **Seguridad de las credenciales.** El `DATABASE_URL` de Neon y los tokens de Google dan
+  acceso total. Solo se usan en el servidor (nunca en el cliente) y nunca deben subirse a
+  git. El `.gitignore` ya excluye `.env.local`.
 - **Qué calendarios cuentan como "ocupado".** Al conectar una cuenta, la app marca como
   *check_for_conflicts = true* los calendarios donde eres dueño/editor (incluido el
   primario). Si quieres que algún calendario **no** bloquee tu disponibilidad (o al revés),
-  cambia ese valor en la colección `calendars` de Appwrite.
+  cambia ese valor en la tabla `calendars` de Neon.
 - **Limitaciones de esta v1.** No hay cancelación/reagenda desde la app (el invitado puede
   cancelar desde la propia invitación de Google), ni recordatorios extra más allá de los de
   Google Calendar, ni varios horarios partidos por día. Todo eso es fácil de agregar después
@@ -169,10 +167,11 @@ agrega también `http://localhost:3000/api/auth/callback` como redirect URI en G
 
 ```
 config.ts                    ← lo ÚNICO que editas para personalizar
-appwrite/SETUP.md            ← cómo crear las colecciones en Appwrite (sin terminal)
+neon/SETUP.md                ← cómo crear las tablas en Neon (sin terminal)
 lib/google.ts                ← OAuth, free/busy combinado, crear eventos
 lib/availability.ts          ← cálculo de huecos libres
-lib/appwrite.ts              ← cliente de Appwrite (server, API key)
+lib/db.ts                    ← cliente de Neon (server) + helpers de SQL
+lib/schema.ts                ← definición de las tablas (la usa /api/setup)
 app/page.tsx                 ← landing con los tipos de cita
 app/book/[slug]/             ← página de reserva (una por tipo de cita)
 app/connect/                 ← panel para conectar tus cuentas (protegido)

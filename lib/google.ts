@@ -1,12 +1,12 @@
 import { google } from "googleapis";
-import { Query, Models } from "node-appwrite";
 import {
-  getDb,
-  getDatabaseId,
+  getSql,
   COL,
+  SELECT_ALL,
+  Row,
   upsertByField,
   findOneByField,
-} from "./appwrite";
+} from "./db";
 
 // Scopes mínimos: leer calendarios (para free/busy) y crear eventos.
 const SCOPES = [
@@ -91,24 +91,37 @@ export async function handleCallback(code: string): Promise<string> {
 
 // Construye un cliente autenticado a partir de un documento de cuenta ya cargado,
 // refrescando y persistiendo los tokens cuando hace falta.
-function buildClientForAccount(acc: Models.Document) {
+function buildClientForAccount(acc: Row) {
   const client = oauthClient();
   client.setCredentials({
-    access_token: acc.access_token ?? undefined,
-    refresh_token: acc.refresh_token ?? undefined,
-    expiry_date: acc.expiry_date ?? undefined,
+    access_token: (acc.access_token as string) ?? undefined,
+    refresh_token: (acc.refresh_token as string) ?? undefined,
+    expiry_date: (acc.expiry_date as number) ?? undefined,
   });
 
   // Cuando googleapis refresca el access_token, lo guardamos de vuelta.
-  const db = getDb();
-  const dbId = getDatabaseId();
+  const sql = getSql();
   client.on("tokens", (t) => {
-    const upd: Record<string, unknown> = {};
-    if (t.access_token) upd.access_token = t.access_token;
-    if (t.expiry_date) upd.expiry_date = t.expiry_date;
-    if (t.refresh_token) upd.refresh_token = t.refresh_token;
-    if (Object.keys(upd).length > 0) {
-      void db.updateDocument(dbId, COL.accounts, acc.$id, upd);
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+    if (t.access_token) {
+      vals.push(t.access_token);
+      sets.push(`access_token = $${vals.length}`);
+    }
+    if (t.expiry_date) {
+      vals.push(t.expiry_date);
+      sets.push(`expiry_date = $${vals.length}`);
+    }
+    if (t.refresh_token) {
+      vals.push(t.refresh_token);
+      sets.push(`refresh_token = $${vals.length}`);
+    }
+    if (sets.length > 0) {
+      vals.push(acc.$id);
+      void sql(
+        `UPDATE "${COL.accounts}" SET ${sets.join(", ")} WHERE id = $${vals.length}`,
+        vals
+      );
     }
   });
 
@@ -129,12 +142,10 @@ export async function getAllBusy(
   timeMin: string,
   timeMax: string
 ): Promise<BusyInterval[]> {
-  const db = getDb();
-  const dbId = getDatabaseId();
-  const accountsRes = await db.listDocuments(dbId, COL.accounts, [
-    Query.limit(100),
-  ]);
-  const accounts = accountsRes.documents;
+  const sql = getSql();
+  const accounts = (await sql(
+    `SELECT ${SELECT_ALL} FROM "${COL.accounts}" LIMIT 100`
+  )) as Row[];
   if (accounts.length === 0) return [];
 
   // Cada cuenta es independiente: las consultamos en paralelo. Si una falla
@@ -144,11 +155,11 @@ export async function getAllBusy(
       try {
         // Traemos los calendarios de la cuenta (account_id tiene índice) y
         // filtramos en JS los marcados para conflictos.
-        const calsRes = await db.listDocuments(dbId, COL.calendars, [
-          Query.equal("account_id", [a.$id]),
-          Query.limit(200),
-        ]);
-        const cals = calsRes.documents.filter((c) => c.check_for_conflicts);
+        const calsRows = (await sql(
+          `SELECT ${SELECT_ALL} FROM "${COL.calendars}" WHERE account_id = $1 LIMIT 200`,
+          [a.$id]
+        )) as Row[];
+        const cals = calsRows.filter((c) => c.check_for_conflicts);
         if (cals.length === 0) return [];
 
         // Reusamos el documento de cuenta ya cargado (sin releer de la BD).

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { DateTime, Interval } from "luxon";
 import { getAllBusy, createEvent } from "@/lib/google";
-import { createDoc, COL } from "@/lib/appwrite";
+import { createDoc, COL } from "@/lib/db";
 import { getSettings, findMeetingType } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";

@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { Query } from "node-appwrite";
-import { getDb, getDatabaseId, COL } from "@/lib/appwrite";
+import { getSql, COL, Row } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -10,12 +9,12 @@ async function getConnectedEmails(): Promise<{
   error: string | null;
 }> {
   try {
-    const db = getDb();
-    const res = await db.listDocuments(getDatabaseId(), COL.accounts, [
-      Query.limit(100),
-    ]);
+    const sql = getSql();
+    const rows = (await sql(
+      `SELECT email FROM "${COL.accounts}" LIMIT 100`
+    )) as Row[];
     return {
-      emails: res.documents.map((a) => a.email as string),
+      emails: rows.map((a) => a.email as string),
       error: null,
     };
   } catch (e) {
