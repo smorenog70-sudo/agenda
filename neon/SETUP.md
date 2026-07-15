@@ -51,6 +51,38 @@ La página `/setup` ejecuta el DDL a partir de `lib/schema.ts`. Cada tabla lleva
 
 ---
 
+## Migrar a otra base de Neon
+
+Si quieres mover la app a **otra base de Neon** (otro proyecto, otra región, otra
+cuenta…), la app trae una herramienta que copia todos los datos sola. No necesitas
+SQL ni terminal:
+
+1. Crea el proyecto/base **nuevo** en Neon y copia su **Connection string**
+   (variante *Pooled connection*, igual que siempre).
+2. En Vercel (Project → Settings → Environment Variables):
+   - Cambia **`DATABASE_URL`** → ponle la connection string de la base **NUEVA**.
+   - Agrega **`OLD_DATABASE_URL`** → ponle la connection string de la base **VIEJA**
+     (el valor que tenía `DATABASE_URL` hasta ahora).
+3. Redespliega (Deployments → ⋯ → Redeploy) para que tome las variables.
+4. Entra a `https://TU-URL.vercel.app/migrate` (te pedirá tu `ADMIN_PASSWORD`).
+   Verás cuántas filas hay en cada base. Dale al botón
+   **"Copiar datos a la base nueva"**.
+5. Verifica que todo esté bien (revisa `/connect` y `/admin`). Cuando confirmes,
+   **borra `OLD_DATABASE_URL`** de Vercel y redespliega. La base vieja queda intacta
+   por si necesitas volver; puedes borrarla en Neon cuando quieras.
+
+Notas:
+
+- La migración **crea las tablas en la base nueva** si faltan (mismo DDL que `/setup`)
+  y **no modifica la base vieja** (solo lee de ella).
+- Es **idempotente**: si la repites, las filas que ya existen en destino se saltan
+  (`ON CONFLICT DO NOTHING`). Se preservan los `id` y `created_at` originales.
+- Lo ideal es migrar hacia una base **vacía**. Si la nueva ya tiene datos propios
+  (p. ej. una cuenta con el mismo correo pero otro `id`), esas filas se saltan y las
+  filas que dependían de ellas pueden fallar por la referencia (FK).
+
+---
+
 ## Forma manual (opcional)
 
 Si prefieres crear el esquema tú desde el **SQL Editor** de Neon, ejecuta el DDL

@@ -6,6 +6,7 @@ export const config = {
   matcher: [
     "/connect",
     "/setup",
+    "/migrate",
     "/admin",
     "/api/auth/google",
     "/api/accounts",
@@ -13,6 +14,7 @@ export const config = {
     "/api/admin",
     "/api/admin/bookings",
     "/api/admin/waitlist",
+    "/api/admin/migrate",
   ],
 };
 
@@ -24,7 +26,12 @@ export function middleware(req: NextRequest) {
   if (authed) return NextResponse.next();
 
   const path = req.nextUrl.pathname;
-  if (path === "/connect" || path === "/setup" || path === "/admin") {
+  if (
+    path === "/connect" ||
+    path === "/setup" ||
+    path === "/migrate" ||
+    path === "/admin"
+  ) {
     return NextResponse.redirect(new URL(`/login?next=${path}`, req.url));
   }
   return NextResponse.json({ error: "No autorizado." }, { status: 401 });
