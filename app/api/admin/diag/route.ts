@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSql, COL } from "@/lib/db";
+import { getSql, COL, Row } from "@/lib/db";
+import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -63,11 +64,35 @@ export async function GET() {
     writeTest = e instanceof Error ? `ERROR: ${e.message}` : "ERROR";
   }
 
+  // Correos reales guardados en accounts vs. los que exige la configuración.
+  let accountEmails: string[] = [];
+  let requiredEmails: string[] = [];
+  let matching: { email: string; connected: boolean }[] = [];
+  try {
+    const sql = getSql();
+    const rows = (await sql(`SELECT email FROM "${COL.accounts}" LIMIT 100`)) as Row[];
+    accountEmails = rows.map((r) => String(r.email));
+    const settings = await getSettings();
+    requiredEmails = Array.from(
+      new Set(settings.meetingTypes.map((m) => m.accountEmail.toLowerCase()))
+    );
+    const connected = new Set(accountEmails.map((e) => e.toLowerCase()));
+    matching = requiredEmails.map((email) => ({
+      email,
+      connected: connected.has(email),
+    }));
+  } catch {
+    // dejamos las listas vacías si algo falla
+  }
+
   return NextResponse.json({
     databaseUrlPresent: target.present,
     host: target.host,
     database: target.database,
     rowCounts: counts,
     writeReadTest: writeTest,
+    accountEmails,
+    requiredEmails,
+    matching,
   });
 }
