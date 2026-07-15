@@ -13,7 +13,6 @@ export const config = {
     "/api/admin",
     "/api/admin/bookings",
     "/api/admin/waitlist",
-    "/api/admin/diag",
   ],
 };
 
