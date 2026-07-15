@@ -15,6 +15,57 @@ const BASE = [
   `created_at timestamptz NOT NULL DEFAULT now()`,
 ];
 
+// Nombre de cada columna de una tabla (primer token de cada línea de DDL).
+export function tableColumns(def: TableDef): string[] {
+  return def.columns.map((c) => c.trim().split(/\s+/)[0]);
+}
+
+type SqlFn = (query: string, params?: unknown[]) => Promise<unknown>;
+
+// Ejecuta el DDL idempotente (CREATE ... IF NOT EXISTS) sobre la conexión dada.
+// Lo usan /api/setup (base actual) y /api/admin/migrate (base destino).
+export async function ensureSchema(
+  sql: SqlFn
+): Promise<{ created: string[]; errors: string[] }> {
+  const created: string[] = [];
+  const errors: string[] = [];
+  const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+  // pgcrypto aporta gen_random_uuid() para los IDs por defecto.
+  try {
+    await sql(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
+    created.push('extensión "pgcrypto"');
+  } catch (e) {
+    errors.push(`pgcrypto: ${msg(e)}`);
+  }
+
+  for (const table of SCHEMA) {
+    try {
+      const cols = table.columns.join(",\n  ");
+      await sql(`CREATE TABLE IF NOT EXISTS "${table.id}" (\n  ${cols}\n)`);
+      created.push(`tabla "${table.id}"`);
+    } catch (e) {
+      errors.push(`tabla ${table.id}: ${msg(e)}`);
+      continue;
+    }
+
+    for (const idx of table.indexes) {
+      try {
+        const unique = idx.unique ? "UNIQUE " : "";
+        const colList = idx.columns.map((c) => `"${c}"`).join(", ");
+        await sql(
+          `CREATE ${unique}INDEX IF NOT EXISTS "${idx.name}" ON "${table.id}" (${colList})`
+        );
+        created.push(`  índice ${table.id}.${idx.name}`);
+      } catch (e) {
+        errors.push(`índice ${table.id}.${idx.name}: ${msg(e)}`);
+      }
+    }
+  }
+
+  return { created, errors };
+}
+
 export const SCHEMA: TableDef[] = [
   {
     id: "accounts",
