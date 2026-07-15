@@ -10,7 +10,11 @@ export function getSql(): NeonQueryFunction<false, false> {
   if (!url) {
     throw new Error("Falta DATABASE_URL en el entorno.");
   }
-  cached = neon(url);
+  // IMPORTANTE: el driver de Neon consulta por HTTP con `fetch`, y Next.js
+  // cachea las respuestas de `fetch` en Server Components (Data Cache). Sin esto,
+  // páginas como /connect devolverían datos viejos (p. ej. cuentas de cuando la
+  // tabla estaba vacía). `cache: "no-store"` fuerza a leer siempre en vivo.
+  cached = neon(url, { fetchOptions: { cache: "no-store" } });
   return cached;
 }
 
