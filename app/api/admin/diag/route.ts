@@ -64,25 +64,40 @@ export async function GET() {
     writeTest = e instanceof Error ? `ERROR: ${e.message}` : "ERROR";
   }
 
-  // Correos reales guardados en accounts vs. los que exige la configuración.
-  let accountEmails: string[] = [];
-  let requiredEmails: string[] = [];
-  let matching: { email: string; connected: boolean }[] = [];
+  // Volcado crudo de accounts para ver EXACTAMENTE qué hay en cada fila.
+  let accountsRaw: unknown = null;
+  let accountsError: string | null = null;
   try {
     const sql = getSql();
-    const rows = (await sql(`SELECT email FROM "${COL.accounts}" LIMIT 100`)) as Row[];
-    accountEmails = rows.map((r) => String(r.email));
+    const rows = (await sql(
+      `SELECT id, email, pg_typeof(email)::text AS email_type FROM "${COL.accounts}" LIMIT 20`
+    )) as Row[];
+    accountsRaw = {
+      returned: rows.length,
+      sample: rows.map((r) => ({
+        id: r.id,
+        email: r.email,
+        emailIsNull: r.email === null,
+        emailJsType: typeof r.email,
+        emailType: r.email_type,
+      })),
+    };
+  } catch (e) {
+    accountsError = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+  }
+
+  // Correos esperados por la configuración guardada.
+  let requiredEmails: string[] = [];
+  try {
     const settings = await getSettings();
     requiredEmails = Array.from(
       new Set(settings.meetingTypes.map((m) => m.accountEmail.toLowerCase()))
     );
-    const connected = new Set(accountEmails.map((e) => e.toLowerCase()));
-    matching = requiredEmails.map((email) => ({
-      email,
-      connected: connected.has(email),
-    }));
-  } catch {
-    // dejamos las listas vacías si algo falla
+  } catch (e) {
+    accountsError =
+      (accountsError ? accountsError + " | " : "") +
+      "settings: " +
+      (e instanceof Error ? e.message : String(e));
   }
 
   return NextResponse.json({
@@ -91,8 +106,8 @@ export async function GET() {
     database: target.database,
     rowCounts: counts,
     writeReadTest: writeTest,
-    accountEmails,
+    accountsRaw,
+    accountsError,
     requiredEmails,
-    matching,
   });
 }
